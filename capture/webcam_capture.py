@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-BACKEND_URL = os.environ.get("BACKEND_URL", "http://localhost:8000")
+BACKEND_URL = os.environ.get("BACKEND_URL", "http://localhost:8010")
 FRAME_ENDPOINT = f"{BACKEND_URL}/webhook/frame"
 CAPTURE_INTERVAL_SECONDS = 2
 
