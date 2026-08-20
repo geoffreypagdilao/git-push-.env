@@ -1,0 +1,16 @@
+# Environment variables
+.env
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# CV model weights (auto-downloaded by ultralytics)
+*.pt
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
