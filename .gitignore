@@ -1,0 +1,19 @@
+# Environment variables
+.env
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# CV model weights (auto-downloaded by ultralytics)
+*.pt
+
+# Node (root-level, e.g. Supabase CLI devDependency)
+node_modules/
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
