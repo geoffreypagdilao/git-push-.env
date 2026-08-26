@@ -35,19 +35,29 @@ def check_items_exist() -> bool:
 
 
 def print_result(result: dict) -> None:
-    print(f"final result: item_name={result['item_name']} autonomy_mode={result['autonomy_mode']}")
-    print(f"context: {result['context']}")
+    print(f"\n{result['item_name']} / {result['autonomy_mode']}")
+    print("-" * 60)
+
+    print("Context:")
+    for key, value in result["context"].items():
+        print(f"    {key:<24} {value}")
+
+    print("\nTool calls:")
     if not result["tool_calls"]:
-        print("tool calls: none")
-    for call in result["tool_calls"]:
-        print(f"  tool={call['tool']} args={call['args']}")
-        print(f"    -> result={call['result']}")
-    print(f"final_message: {result['final_message']}")
+        print("    (none)")
+    for i, call in enumerate(result["tool_calls"], start=1):
+        print(f"    {i}. {call['tool']}")
+        print(f"       args:   {call['args']}")
+        print(f"       result: {call['result']}")
+
+    print("\nFinal message:")
+    print(f"    {result['final_message']}")
 
 
 def run_case(label: str, item_name: str, autonomy_mode: str) -> None:
+    banner = f" {label}: run_agent({item_name!r}, {autonomy_mode!r}) "
     print("\n" + "=" * 60)
-    print(f"{label}: run_agent(item_name={item_name!r}, autonomy_mode={autonomy_mode!r})")
+    print(banner.center(60, "="))
     print("=" * 60)
     result = run_agent(item_name, autonomy_mode)
     print_result(result)
