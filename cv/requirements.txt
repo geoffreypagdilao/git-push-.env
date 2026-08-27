@@ -1,3 +1,23 @@
-ultralytics
-opencv-python-headless
-numpy
+# Needs Python 3.12. Torch publishes no wheels for 3.13/3.14 yet, so the
+# default `python3` on a current Mac will fail to install this.
+#   uv venv --python 3.12 .venv && source .venv/bin/activate
+#
+# NOT INSTALLABLE BY PIP, and required for CV_BACKEND=hybrid (the default):
+#   Ollama       https://ollama.com/download   (or: brew install ollama)
+#   the model    ollama pull qwen3-vl:8b-instruct     (~6GB)
+# See cv/README.md.
+
+# YOLOE and the YOLO26 checkpoints need a recent ultralytics.
+ultralytics==8.4.130
+# Pulled in by ultralytics anyway, but pinned so an Apple Silicon (MPS)
+# install is reproducible.
+torch==2.13.0
+torchvision==0.28.0
+opencv-python-headless==5.0.0.93
+numpy==2.5.2
+# Talks to the local Ollama server.
+requests==2.34.2
+# YOLOE's text encoder. Ultralytics tries to pip-install this from git the
+# first time set_classes() runs, which fails in a pip-less venv and is not
+# something a Docker build should do at runtime - so declare it up front.
+clip @ git+https://github.com/ultralytics/CLIP.git
