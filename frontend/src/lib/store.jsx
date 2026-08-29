@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useReducer } from 'react'
-import { seedState, newId } from './mockData'
+import { seedState, newId, detectedInventory } from './mockData'
 
 const KEY = 'yoink.state'
 const DAY = 86_400_000
@@ -23,6 +23,15 @@ function reducer(state, action) {
   switch (action.type) {
     case 'COMPLETE_ONBOARDING':
       return { ...state, onboarded: true }
+
+    // Baseline scan confirmed: the detected ingredients become the fresh
+    // inventory; seeded pantry staples stay.
+    case 'CONFIRM_BASELINE':
+      return {
+        ...state,
+        onboarded: true,
+        inventory: [...detectedInventory(), ...state.inventory.filter((i) => i.section === 'pantry')],
+      }
 
     case 'REMOVE_ITEM':
       return { ...state, inventory: state.inventory.filter((i) => i.id !== action.id) }

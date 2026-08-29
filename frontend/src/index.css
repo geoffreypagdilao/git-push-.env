@@ -46,9 +46,11 @@
   --font-ui: 'Bricolage Grotesque Variable', 'Segoe UI', system-ui, sans-serif;
   --font-word: 'Fraunces Variable', Georgia, 'Times New Roman', serif;
 
-  /* layout — mobile-first single column that widens on larger screens */
-  --content-narrow: 660px; /* long-form: onboarding, scan, recipe */
-  --content-wide: 1140px; /* dashboards: fridge, shopping list */
+  /* layout — every screen is the same fixed-width phone frame as the
+     landing page, centred on the paper canvas at any viewport width */
+  --content: 480px;
+  --content-narrow: var(--content);
+  --content-wide: var(--content);
   --gutter: 20px;
 
   color-scheme: light;

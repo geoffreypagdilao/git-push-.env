@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import Icon from '../components/Icon'
 import { useNav } from '../lib/navigation'
-import { useStore } from '../lib/store'
 
 // One L-shaped bracket. Rotated into each corner of the viewfinder.
 function Corner({ where }) {
@@ -77,7 +76,7 @@ export function CameraScanner({ status = 'Detecting fridge…', onBack, onMenu }
 }
 
 // Scripted capture sequence for the onboarding baseline scan. Steps through
-// the detection states, then finishes onboarding and drops into the fridge.
+// the detection states, then hands off to the detected-ingredients review.
 const SEQUENCE = [
   { status: 'Detecting fridge…', hold: 1600 },
   { status: 'Fridge detected', hold: 1100 },
@@ -87,18 +86,16 @@ const SEQUENCE = [
 
 export default function BaselineScan() {
   const nav = useNav()
-  const { dispatch } = useStore()
   const [step, setStep] = useState(0)
 
   useEffect(() => {
     if (step >= SEQUENCE.length) {
-      dispatch({ type: 'COMPLETE_ONBOARDING' })
-      const t = setTimeout(() => nav.go('fridge', { justOnboarded: true }), 400)
+      const t = setTimeout(() => nav.replace('detected'), 400)
       return () => clearTimeout(t)
     }
     const t = setTimeout(() => setStep((s) => s + 1), SEQUENCE[step].hold)
     return () => clearTimeout(t)
-  }, [step, dispatch, nav])
+  }, [step, nav])
 
   const status = SEQUENCE[Math.min(step, SEQUENCE.length - 1)].status
 

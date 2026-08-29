@@ -144,13 +144,62 @@ const RECIPES = [
   },
 ]
 
-// Flat list the vision model "detected" on the baseline scan, in the order a
-// diff would surface them. `needsDate` items land in inventory without an expiry.
+// What the vision model "detected" on the baseline scan — one entry per
+// sticker in /public/stickers. Confirming the scan turns these into fresh
+// inventory items (see CONFIRM_BASELINE in the store).
+// columns: sticker, name, category, qty, unit, addedDaysAgo, daysToExpiry, perWeek
 const DETECTED = [
-  'Salmon Fillet', 'Chicken Thighs', 'Heirloom Tomatoes', 'Baby Spinach',
-  'Milk', 'Eggs', 'Greek Yogurt', 'Cheddar', 'Butter', 'Carrots',
-  'Red Bell Pepper', 'Spring Onions', 'Orange Juice', 'Leftover Pad Thai',
-]
+  ['tomato.png', 'Heirloom Tomatoes', 'Vegetables', 4, 'pcs', 0, 3, 5],
+  ['egg.png', 'Eggs', 'Dairy & Eggs', 6, 'pcs', 0, 18, 5],
+  ['cheese.png', 'Cheddar', 'Dairy & Eggs', 1, 'block', 0, 24, 1],
+  ['lettuce.png', 'Romaine Lettuce', 'Vegetables', 1, 'head', 0, 5, 1.5],
+  ['brocolli.png', 'Broccoli', 'Vegetables', 1, 'head', 0, 6, 1],
+  ['avocado.png', 'Avocado', 'Fruit', 2, 'pcs', 0, 4, 2],
+  ['radish.png', 'Radishes', 'Vegetables', 1, 'bunch', 0, 9, 1],
+  ['chili.png', 'Red Chillies', 'Vegetables', 8, 'pcs', 0, 12, 2],
+  ['bread.png', 'Sourdough Loaf', 'Grains & Pasta', 1, 'loaf', 0, 4, 3],
+].map(([sticker, name, category, qty, unit, addedDaysAgo, daysToExpiry, perWeek]) => ({
+  sticker,
+  name,
+  category,
+  qty,
+  unit,
+  addedDaysAgo,
+  daysToExpiry,
+  perWeek,
+}))
+
+// Build fresh inventory items from the detected list (fresh ISO ids each call).
+function detectedInventory() {
+  return DETECTED.map((d) => ({
+    id: id('itm'),
+    name: d.name,
+    category: d.category,
+    section: 'fresh',
+    qty: d.qty,
+    unit: d.unit,
+    addedDaysAgo: d.addedDaysAgo,
+    shelfLifeDays: d.addedDaysAgo + d.daysToExpiry,
+    expiryDate: inDays(d.daysToExpiry),
+    perWeek: d.perWeek,
+  }))
+}
+
+// Best-effort sticker (in /public/stickers) for an inventory item by name.
+// Detected items map exactly; seed items fall back to a rough visual match.
+const STICKER_ALIASES = {
+  'Baby Spinach': 'lettuce.png',
+  'Spring Onions': 'lettuce.png',
+  'Red Bell Pepper': 'chili.png',
+  Butter: 'cheese.png',
+  Carrots: 'radish.png',
+  Milk: 'cheese.png',
+  'Greek Yogurt': 'cheese.png',
+}
+export function stickerFor(name) {
+  const hit = DETECTED.find((d) => d.name === name)
+  return hit?.sticker || STICKER_ALIASES[name] || null
+}
 
 export function seedState() {
   return {
@@ -165,7 +214,7 @@ export function seedState() {
   }
 }
 
-export { RECIPES, DETECTED, id as newId }
+export { RECIPES, DETECTED, detectedInventory, id as newId }
 
 export const CATEGORY_ORDER = [
   'Vegetables', 'Fruit', 'Dairy & Eggs', 'Meat & Fish', 'Leftovers',

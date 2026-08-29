@@ -5,6 +5,7 @@ import { NavProvider, useNav } from './lib/navigation'
 import { StoreProvider, useStore } from './lib/store'
 import Onboarding from './screens/Onboarding'
 import BaselineScan from './screens/BaselineScan'
+import DetectedIngredients from './screens/DetectedIngredients'
 import MyFridge from './screens/MyFridge'
 import ShoppingList from './screens/ShoppingList'
 import Recipe from './screens/Recipe'
@@ -12,6 +13,7 @@ import Recipe from './screens/Recipe'
 const SCREENS = {
   onboarding: Onboarding,
   scan: BaselineScan,
+  detected: DetectedIngredients,
   fridge: MyFridge,
   shopping: ShoppingList,
   recipe: Recipe,

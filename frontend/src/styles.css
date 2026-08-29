@@ -16,6 +16,7 @@
 }
 
 .screen {
+  min-height: 100svh;
   animation: screen-in var(--dur-slow) var(--ease);
 }
 @keyframes screen-in {
@@ -42,23 +43,9 @@
   padding-bottom: 200px;
 }
 
-@media (min-width: 700px) {
-  :root {
-    --gutter: 32px;
-  }
-  .screen__scroll {
-    padding-top: 14px;
-  }
-}
-@media (min-width: 1040px) {
-  :root {
-    --gutter: 44px;
-  }
-}
-
-/* ── responsive grids ──────────────────────────────────────────────────
-   Single column on phones; multi-column as space allows. Each grid item
-   aligns to the top so uneven cards don't stretch.
+/* ── content grids ────────────────────────────────────────────────────
+   Every screen is a fixed phone-width frame, so these stay single-column
+   at all viewport widths.
    ------------------------------------------------------------------- */
 
 .card-grid {
@@ -79,29 +66,6 @@
   gap: 0 32px;
   grid-template-columns: 1fr;
   align-items: start;
-}
-
-@media (min-width: 640px) {
-  .card-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-@media (min-width: 780px) {
-  .recipe-cols {
-    grid-template-columns: 1fr 1fr;
-    column-gap: 40px;
-  }
-}
-@media (min-width: 1040px) {
-  .card-grid {
-    grid-template-columns: repeat(3, 1fr);
-  }
-  .cat-grid {
-    column-count: 2;
-  }
-  .shop-cols {
-    grid-template-columns: 1fr 1fr;
-  }
 }
 
 /* ── top bar ───────────────────────────────────────────────────────── */
@@ -616,7 +580,7 @@
   display: flex;
   flex-direction: column;
   min-height: 100svh;
-  max-width: 480px;
+  max-width: var(--content);
   margin: 0 auto;
 }
 .onb__collage {
@@ -688,11 +652,13 @@
 .camscan {
   position: fixed;
   inset: 0;
+  margin-inline: auto;
+  max-width: var(--content);
   z-index: 60;
   overflow: hidden;
   background: #0b0b0d;
   color: #fff;
-  --vf-w: min(75vw, 340px);
+  --vf-w: min(75%, 340px);
   --vf-h: min(45vh, 420px);
 }
 .camscan__feed {
@@ -785,7 +751,7 @@
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  max-width: calc(100vw - 40px);
+  max-width: calc(100% - 40px);
   padding: 12px 18px;
   border-radius: var(--r-pill);
   background: rgba(255, 255, 255, 0.16);
@@ -825,6 +791,72 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .camscan__pulse::after {
+    animation: none;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   DETECTED INGREDIENTS
+   ════════════════════════════════════════════════════════════════════ */
+
+.lead-count {
+  font-weight: 800;
+  font-size: 1.9rem;
+  letter-spacing: -0.035em;
+  color: var(--ink);
+  margin-bottom: 2px;
+}
+.lead-sub {
+  color: var(--label);
+  font-size: 0.92rem;
+  margin-bottom: 8px;
+}
+
+.detected__stage {
+  position: relative;
+  width: 100%;
+  min-height: 46vh;
+  margin: 4px 0 20px;
+}
+.detected__stage .sticker {
+  animation: detected-pop var(--dur-slow) var(--ease) backwards;
+}
+.detected__stage .sticker:nth-child(2) { animation-delay: 40ms; }
+.detected__stage .sticker:nth-child(3) { animation-delay: 80ms; }
+.detected__stage .sticker:nth-child(4) { animation-delay: 120ms; }
+.detected__stage .sticker:nth-child(5) { animation-delay: 160ms; }
+.detected__stage .sticker:nth-child(6) { animation-delay: 200ms; }
+.detected__stage .sticker:nth-child(7) { animation-delay: 240ms; }
+.detected__stage .sticker:nth-child(8) { animation-delay: 280ms; }
+.detected__stage .sticker:nth-child(9) { animation-delay: 320ms; }
+@keyframes detected-pop {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) rotate(var(--rotation, 0deg)) scale(0.6);
+  }
+}
+
+.detected__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.detected__list li {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 11px;
+  border-radius: var(--r-pill);
+  background: var(--fill);
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+.detected__list li .icon {
+  color: var(--good);
+}
+@media (prefers-reduced-motion: reduce) {
+  .detected__stage .sticker {
     animation: none;
   }
 }
@@ -872,38 +904,97 @@
   padding: 2px;
 }
 
-.use-soon-card {
+/* ── expiry countdown (Use soon) ───────────────────────────────────── */
+
+.countdown {
   display: flex;
-  gap: 12px;
-  align-items: center;
-  margin-bottom: 8px;
+  flex-direction: column;
+  gap: 10px;
 }
-.use-soon-card__body {
+.countdown__row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  text-align: left;
+  padding: 12px 14px;
+  border-radius: var(--r-card);
+  background: var(--fill);
+  transition: background var(--dur) var(--ease), transform var(--dur) var(--ease);
+}
+.countdown__row:hover {
+  background: var(--fill-2);
+}
+.countdown__row:active {
+  transform: scale(0.99);
+  background: var(--fill-2);
+}
+.countdown__icon {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: var(--r-pill);
+  background: var(--paper);
+  color: var(--label);
+}
+.countdown__icon img {
+  width: 34px;
+  height: 34px;
+  object-fit: contain;
+}
+.countdown__body {
   flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 2px;
 }
-.use-soon-card__name {
-  font-weight: 800;
+.countdown__name {
+  font-weight: 700;
   font-size: 0.98rem;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.01em;
   color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.use-soon-card__why {
+.countdown__cat {
   font-size: 0.8rem;
-  font-weight: 600;
-  margin-bottom: 6px;
+  color: var(--muted);
 }
-.use-soon-card__why--warn {
+.countdown__bang {
+  flex-shrink: 0;
+  font-weight: 800;
+  font-size: 1.1rem;
+  line-height: 1;
+  color: var(--muted);
+}
+.countdown__bang--warn {
   color: var(--warn);
 }
-.use-soon-card__why--bad {
+.countdown__bang--bad {
   color: var(--bad);
 }
-.use-soon-card__why--good {
-  color: var(--muted);
+.countdown__badge {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  min-width: 46px;
+  height: 46px;
+  padding: 0 10px;
+  border-radius: var(--r-pill);
+  background: var(--paper);
+  font-weight: 700;
+  font-size: 0.82rem;
+  color: var(--ink);
+}
+.countdown__badge--warn {
+  color: var(--warn);
+}
+.countdown__badge--bad {
+  color: var(--bad);
 }
 
 .cat-group {
