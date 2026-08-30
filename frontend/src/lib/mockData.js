@@ -116,6 +116,7 @@ const RECIPES = [
     id: 'r-avo-toast',
     title: 'Tomato & Avocado Sourdough',
     image: 'recipe-avo-toast.png',
+    heroScale: 1.3,
     blurb:
       'Uses the sourdough on its last good day and the avocado at peak ripeness. Weekend breakfast, ten minutes.',
     skill: 'Easy',
@@ -143,6 +144,7 @@ const RECIPES = [
     id: 'r-radish-salad',
     title: 'Crunchy Radish & Romaine Salad',
     image: 'recipe-radish-salad.png',
+    heroScale: 1.3,
     blurb:
       'A sharp, cold salad that gets the radishes and lettuce used up while they’re still crisp.',
     skill: 'Easy',

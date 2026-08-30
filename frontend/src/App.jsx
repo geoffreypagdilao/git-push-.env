@@ -9,6 +9,7 @@ import DetectedIngredients from './screens/DetectedIngredients'
 import MyFridge from './screens/MyFridge'
 import ShoppingList from './screens/ShoppingList'
 import Recipe from './screens/Recipe'
+import AskRecipe from './screens/AskRecipe'
 
 const SCREENS = {
   onboarding: Onboarding,
@@ -17,6 +18,7 @@ const SCREENS = {
   fridge: MyFridge,
   shopping: ShoppingList,
   recipe: Recipe,
+  ask: AskRecipe,
 }
 
 const WITH_NAV = new Set(['fridge', 'shopping'])

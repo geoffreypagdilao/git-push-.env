@@ -49,7 +49,6 @@ export default function Recipe({ seedItem }) {
   const [idx, setIdx] = useState(startIdx)
   const [serves, setServes] = useState(RECIPES[startIdx].serves)
   const [added, setAdded] = useState([]) // ingredient names added to the list
-  const [asking, setAsking] = useState(false)
   const [cooking, setCooking] = useState(false)
 
   const recipe = RECIPES[idx]
@@ -64,7 +63,6 @@ export default function Recipe({ seedItem }) {
     setIdx(next)
     setServes(RECIPES[next].serves)
     setAdded([])
-    setAsking(false)
     setCooking(false)
   }
 
@@ -88,6 +86,7 @@ export default function Recipe({ seedItem }) {
             className="recipe2__hero-img"
             src={`${import.meta.env.BASE_URL}stickers/${recipe.image}`}
             alt={recipe.title}
+            style={recipe.heroScale ? { '--hero-scale': recipe.heroScale } : undefined}
           />
         ) : (
           <DishScene />
@@ -95,8 +94,8 @@ export default function Recipe({ seedItem }) {
         <button
           type="button"
           className="recipe2__float recipe2__float--left"
-          aria-label="Back"
-          onClick={nav.back}
+          aria-label="Back to My Fridge"
+          onClick={() => nav.go('fridge')}
         >
           <Icon name="arrow-left" size={20} />
         </button>
@@ -160,13 +159,6 @@ export default function Recipe({ seedItem }) {
           ))}
         </ol>
 
-        {asking && (
-          <div className="recipe2__ask-note">
-            <Icon name="sparkle" size={14} />
-            yoink! can swap any ingredient, scale the recipe, or suggest a side — ask away.
-          </div>
-        )}
-
         <button type="button" className="recipe2__another" onClick={switchRecipe}>
           <Icon name="refresh" size={15} />
           Show another idea
@@ -189,8 +181,8 @@ export default function Recipe({ seedItem }) {
         </div>
         <button
           type="button"
-          className={`recipe2__ask ${asking ? 'is-on' : ''}`}
-          onClick={() => setAsking((v) => !v)}
+          className="recipe2__ask"
+          onClick={() => nav.push('ask')}
         >
           <Icon name="sparkle" size={15} />
           Ask

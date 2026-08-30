@@ -28,6 +28,21 @@
     <circle cx="12" cy="12" r="1.7"/>
     <circle cx="18" cy="12" r="1.7"/>
   </symbol>
+  <symbol id="i-grid" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+    <circle cx="7" cy="5.5" r="1.7"/>
+    <circle cx="17" cy="5.5" r="1.7"/>
+    <circle cx="7" cy="12" r="1.7"/>
+    <circle cx="17" cy="12" r="1.7"/>
+    <circle cx="7" cy="18.5" r="1.7"/>
+    <circle cx="17" cy="18.5" r="1.7"/>
+  </symbol>
+  <symbol id="i-upload" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 15.5V4.5M8 8l4-4 4 4"/>
+    <path d="M5 14.5v3a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3"/>
+  </symbol>
+  <symbol id="i-arrow-up" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 19V5M6 11l6-6 6 6"/>
+  </symbol>
   <symbol id="i-minus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
     <path d="M5.5 12h13"/>
   </symbol>
