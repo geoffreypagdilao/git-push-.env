@@ -1,6 +1,13 @@
+from datetime import datetime, timedelta, timezone
+
 from langchain_core.tools import tool
 
 from backend.app.db.supabase_client import supabase
+
+# Safety guardrail for autopilot: never auto-order the same item more than
+# once within this window, even if the AI decides to. Enforced here in code
+# rather than only in the prompt, so it can't be reasoned around.
+ORDER_COOLDOWN_DAYS = 7
 
 
 @tool
@@ -43,6 +50,10 @@ def place_order(item_name: str) -> dict:
     notes) — it simply flips the item's shopping_list row from
     pending/in_cart to status='purchased' and stamps confirmed_at. If no
     staged row exists for this item, it fails rather than guessing.
+
+    Safety guardrail: this will refuse to order the same item twice within
+    ORDER_COOLDOWN_DAYS, even if called — prevents runaway duplicate orders
+    regardless of what the model decides.
     """
     pending = (
         supabase.table("shopping_list")
@@ -56,6 +67,23 @@ def place_order(item_name: str) -> dict:
             "item_name": item_name,
             "ordered": False,
             "error": "No pending shopping_list row for this item — call add_to_shopping_list first.",
+        }
+
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=ORDER_COOLDOWN_DAYS)).isoformat()
+    recent_purchase = (
+        supabase.table("shopping_list")
+        .select("id")
+        .eq("item_name", item_name)
+        .eq("status", "purchased")
+        .gte("confirmed_at", cutoff)
+        .execute()
+    )
+    if recent_purchase.data:
+        return {
+            "item_name": item_name,
+            "ordered": False,
+            "skipped": True,
+            "reason": f"Already auto-ordered within the last {ORDER_COOLDOWN_DAYS} days — skipping to prevent a duplicate order.",
         }
 
     row_id = pending.data[0]["id"]
