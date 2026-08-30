@@ -2,25 +2,33 @@ import { useMemo } from 'react'
 import TopBar from '../components/TopBar'
 import Button from '../components/Button'
 import Icon from '../components/Icon'
-import Segmented from '../components/Segmented'
 import SectionHeader from '../components/SectionHeader'
 import StatusDot from '../components/StatusDot'
 import Stepper from '../components/Stepper'
 import { useStore } from '../lib/store'
-import { CARTS } from '../lib/mockData'
+import { CARTS, stickerFor } from '../lib/mockData'
 import { plural } from '../lib/inventory'
 
-const CART_HINT = {
-  redmart: 'RedMart delivers across Singapore, usually same day.',
-  amazon: 'Ships on your Amazon Prime membership.',
-  mock: 'Demo checkout — nothing is actually ordered.',
-  instacart: 'Instacart only covers the US and Canada.',
+function StickerTile({ name, children }) {
+  const sticker = stickerFor(name)
+  return (
+    <span className="shop-row__icon">
+      {sticker ? (
+        <img src={`${import.meta.env.BASE_URL}stickers/${sticker}`} alt="" />
+      ) : (
+        <Icon name="leaf" size={20} />
+      )}
+      {children}
+    </span>
+  )
 }
 
 function ShopRow({ entry, dispatch, auto }) {
   return (
     <div className="shop-row">
-      {auto ? <StatusDot status={entry.urgency || 'warn'} /> : <span className="shop-row__spacer" />}
+      <StickerTile name={entry.name}>
+        {auto && <StatusDot status={entry.urgency || 'warn'} size={11} />}
+      </StickerTile>
       <div className="shop-row__body">
         <div className="shop-row__name">{entry.name}</div>
         <div className={`shop-row__why ${auto ? 'shop-row__why--auto' : ''}`}>
@@ -53,7 +61,6 @@ export default function ShoppingList() {
   const pending = useMemo(() => state.shopping.filter((s) => s.status === 'pending'), [state.shopping])
   const inCart = useMemo(() => state.shopping.filter((s) => s.status === 'in_cart'), [state.shopping])
   const auto = pending.filter((s) => s.source === 'auto')
-  const manual = pending.filter((s) => s.source === 'manual')
 
   const cart = CARTS.find((c) => c.id === state.cart) || CARTS[1]
   const sentCart = CARTS.find((c) => c.id === state.lastSent?.cart)
@@ -67,13 +74,13 @@ export default function ShoppingList() {
         <p className="meta" style={{ marginTop: 8 }}>
           {pending.length === 0 && inCart.length > 0
             ? `${plural(inCart.length, 'item')} on the way to ${sentCart?.label || cart.label}`
-            : `${auto.length} auto-added · ${plural(manual.length, 'staple')}`}
+            : `${auto.length} auto-added`}
         </p>
 
         <div className="shop-cols">
           {auto.length > 0 && (
             <div className="shop-col">
-              <SectionHeader label="Added automatically" tag="low or out" tone="bad" />
+              <SectionHeader label="Added automatically" />
               <div className="shop-block">
                 {auto.map((e) => (
                   <ShopRow key={e.id} entry={e} dispatch={dispatch} auto />
@@ -89,9 +96,11 @@ export default function ShoppingList() {
             <div className="shop-block">
               {inCart.map((e) => (
                 <div className="shop-row shop-row--sent" key={e.id}>
-                  <span className="shop-row__done">
-                    <Icon name="check" size={12} />
-                  </span>
+                  <StickerTile name={e.name}>
+                    <span className="shop-row__done">
+                      <Icon name="check" size={11} />
+                    </span>
+                  </StickerTile>
                   <div className="shop-row__body">
                     <div className="shop-row__name">{e.name}</div>
                     <div className="shop-row__why">
@@ -106,22 +115,6 @@ export default function ShoppingList() {
 
         {pending.length === 0 && inCart.length === 0 && (
           <p className="muted-note">List’s clear. yoink! refills it as things run low.</p>
-        )}
-
-        {pending.length > 0 && (
-          <div className="cart-picker">
-            <SectionHeader label="Send to" />
-            <Segmented
-              size="sm"
-              value={state.cart}
-              onChange={(id) => dispatch({ type: 'SET_CART', cart: id })}
-              options={CARTS.map((c) => ({ value: c.id, label: c.label, disabled: c.disabled }))}
-            />
-            <p className="cart-hint">
-              <Icon name={state.cart === 'instacart' ? 'close' : 'check'} size={13} />
-              {CART_HINT[state.cart]}
-            </p>
-          </div>
         )}
 
         <div className="shop-send">

@@ -85,7 +85,7 @@ export default function MyFridge({ justOnboarded = false }) {
             <Icon name="bell" size={20} className="payoff__icon" />
             <div className="payoff__text">
               <strong>You’re all set.</strong>
-              <span>yoink! will warn you before anything runs out or spoils.</span>
+              <span>yoink! will remind you before anything runs out or spoils.</span>
             </div>
             <button
               type="button"

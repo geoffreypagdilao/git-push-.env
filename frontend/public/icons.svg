@@ -20,6 +20,9 @@
   <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
     <path d="M12 5.5v13M5.5 12h13"/>
   </symbol>
+  <symbol id="i-bookmark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M6.5 4.5h11a1 1 0 0 1 1 1v14l-6.5-4-6.5 4v-14a1 1 0 0 1 1-1Z"/>
+  </symbol>
   <symbol id="i-more" viewBox="0 0 24 24" fill="currentColor" stroke="none">
     <circle cx="6" cy="12" r="1.7"/>
     <circle cx="12" cy="12" r="1.7"/>

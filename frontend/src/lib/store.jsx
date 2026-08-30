@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useReducer } from 'react'
-import { seedState, newId, detectedInventory } from './mockData'
+import { seedState, newId, detectedInventory, detectedShopping } from './mockData'
 
 const KEY = 'yoink.state'
 const DAY = 86_400_000
@@ -25,12 +25,14 @@ function reducer(state, action) {
       return { ...state, onboarded: true }
 
     // Baseline scan confirmed: the detected ingredients become the fresh
-    // inventory; seeded pantry staples stay.
+    // inventory; seeded pantry staples stay. The auto shopping rows are
+    // rebuilt from those same items so the two screens agree.
     case 'CONFIRM_BASELINE':
       return {
         ...state,
         onboarded: true,
         inventory: [...detectedInventory(), ...state.inventory.filter((i) => i.section === 'pantry')],
+        shopping: [...detectedShopping(), ...state.shopping.filter((s) => s.source === 'manual')],
       }
 
     case 'REMOVE_ITEM':

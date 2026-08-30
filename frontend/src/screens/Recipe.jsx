@@ -1,213 +1,210 @@
 import { useMemo, useState } from 'react'
-import TopBar from '../components/TopBar'
-import Button from '../components/Button'
 import Icon from '../components/Icon'
-import SectionHeader from '../components/SectionHeader'
 import { DishScene } from '../components/Illustration'
+import { useNav } from '../lib/navigation'
 import { useStore } from '../lib/store'
-import { RECIPES } from '../lib/mockData'
-import { daysUntilExpiry, isUseSoon } from '../lib/inventory'
+import { RECIPES, stickerFor } from '../lib/mockData'
 
-function shortFresh(item) {
-  const d = daysUntilExpiry(item)
-  if (d == null) return null
-  if (d <= 0) return 'use today'
-  if (d === 1) return 'use in 1d'
-  return `use in ${d}d`
-}
-
-function Step({ n, text, defaultOpen }) {
-  const [open, setOpen] = useState(defaultOpen)
+function IngredientCard({ ing, inFridge, added, onAdd }) {
+  const sticker = stickerFor(ing.name)
   return (
-    <div className={`step ${open ? 'is-open' : ''}`}>
-      <button type="button" className="step__head" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
-        <span className="step__n">{n}</span>
-        <span className="step__lead">{text}</span>
-        <Icon name="chevron-down" size={18} className="step__chev" />
-      </button>
+    <div className="ing-card">
+      <div className="ing-card__img">
+        {sticker ? (
+          <img src={`${import.meta.env.BASE_URL}stickers/${sticker}`} alt="" />
+        ) : (
+          <Icon name="leaf" size={22} />
+        )}
+        <button
+          type="button"
+          className={`ing-card__add ${added ? 'is-added' : ''}`}
+          aria-label={added ? `${ing.name} added to list` : `Add ${ing.name} to list`}
+          onClick={onAdd}
+          disabled={added}
+        >
+          <Icon name={added ? 'check' : 'plus'} size={14} />
+        </button>
+      </div>
+      <div className="ing-card__name" title={ing.name}>
+        {ing.name}
+      </div>
+      <div className="ing-card__qty">
+        {ing.qty}
+        {!inFridge && !ing.pantry && <span className="ing-card__missing"> · not in fridge</span>}
+      </div>
     </div>
   )
 }
 
 export default function Recipe({ seedItem }) {
+  const nav = useNav()
   const { state, dispatch } = useStore()
 
   const startIdx = useMemo(() => {
     if (!seedItem) return 0
-    const i = RECIPES.findIndex((r) => r.uses.includes(seedItem))
+    const i = RECIPES.findIndex((r) => r.ingredients.some((ing) => ing.name === seedItem))
     return i < 0 ? 0 : i
   }, [seedItem])
 
   const [idx, setIdx] = useState(startIdx)
-  const [added, setAdded] = useState([]) // names added to list from "you'll need"
-  const [addOnUsed, setAddOnUsed] = useState(false)
+  const [serves, setServes] = useState(RECIPES[startIdx].serves)
+  const [added, setAdded] = useState([]) // ingredient names added to the list
+  const [asking, setAsking] = useState(false)
+  const [cooking, setCooking] = useState(false)
+
   const recipe = RECIPES[idx]
 
-  const invByName = useMemo(() => {
-    const m = new Map()
-    for (const it of state.inventory) m.set(it.name, it)
-    return m
-  }, [state.inventory])
+  const fridgeNames = useMemo(
+    () => new Set(state.inventory.map((i) => i.name)),
+    [state.inventory],
+  )
 
-  const haveCount = recipe.uses.filter((n) => invByName.has(n)).length
-  const feedback = state.recipeFeedback.find((f) => f.recipe_title === recipe.title)
-
-  const anotherIdea = () => {
-    setIdx((i) => (i + 1) % RECIPES.length)
+  const switchRecipe = () => {
+    const next = (idx + 1) % RECIPES.length
+    setIdx(next)
+    setServes(RECIPES[next].serves)
     setAdded([])
-    setAddOnUsed(false)
+    setAsking(false)
+    setCooking(false)
   }
 
-  const rate = (liked) =>
-    dispatch({ type: 'RATE_RECIPE', title: recipe.title, liked, ingredientsUsed: recipe.uses })
+  const addToList = (name) => {
+    if (added.includes(name)) return
+    dispatch({ type: 'ADD_STAPLE', name })
+    setAdded((a) => [...a, name])
+  }
+
+  const addAll = () => {
+    recipe.ingredients
+      .filter((ing) => !fridgeNames.has(ing.name) && !added.includes(ing.name))
+      .forEach((ing) => addToList(ing.name))
+  }
 
   return (
-    <div className="screen screen--narrow">
-      <TopBar title="Recipe" />
-
-      <div className="screen__scroll">
-        <span className="eyebrow recipe__eyebrow">Tonight’s cook</span>
-        <h1 className="recipe__title">{recipe.title}</h1>
-        <p className="recipe__blurb">{recipe.blurb}</p>
-
-        <p className="meta" style={{ marginBottom: 8 }}>
-          Uses up {haveCount} thing{haveCount === 1 ? '' : 's'} you already have
-        </p>
-        <div className="recipe__uses-line">
-          {recipe.uses.map((name) => {
-            const item = invByName.get(name)
-            const warn = item && isUseSoon(item)
-            return (
-              <span key={name} className={`use-badge ${warn ? 'use-badge--warn' : ''}`}>
-                {warn && <Icon name="clock" size={12} />}
-                {name}
-                {warn ? ` · ${shortFresh(item)}` : ''}
-              </span>
-            )
-          })}
-        </div>
-
-        <div className="recipe__hero">
+    <div className="screen recipe2">
+      <div className="recipe2__hero">
+        {recipe.image ? (
+          <img
+            className="recipe2__hero-img"
+            src={`${import.meta.env.BASE_URL}stickers/${recipe.image}`}
+            alt={recipe.title}
+          />
+        ) : (
           <DishScene />
-        </div>
+        )}
+        <button
+          type="button"
+          className="recipe2__float recipe2__float--left"
+          aria-label="Back"
+          onClick={nav.back}
+        >
+          <Icon name="arrow-left" size={20} />
+        </button>
+        <button
+          type="button"
+          className="recipe2__float recipe2__float--right"
+          aria-label="Save recipe"
+        >
+          <Icon name="bookmark" size={18} />
+        </button>
+      </div>
 
-        <div className="recipe-cols">
-          <div>
-            <SectionHeader label="You’ll use" tag="from your fridge" />
-            <div className="ing-list">
-              {recipe.uses.map((name) => {
-                const item = invByName.get(name)
-                const warn = item && isUseSoon(item)
-                return (
-                  <div className="ing" key={name}>
-                    <span className="ing__check">
-                      <Icon name="check" size={13} />
-                    </span>
-                    <span className="ing__name">{name}</span>
-                    {warn && <span className="ing__tag ing__tag--warn">{shortFresh(item)}</span>}
-                  </div>
-                )
-              })}
-            </div>
+      <div className="screen__scroll recipe2__body">
+        <h1 className="recipe2__title">{recipe.title}</h1>
+        <p className="recipe2__desc">{recipe.blurb}</p>
+
+        <div className="recipe2__stats">
+          <div className="recipe2__stat">
+            <span className="recipe2__stat-k">Skill Level</span>
+            <span className="recipe2__stat-v">{recipe.skill}</span>
           </div>
-
-          <div>
-            <SectionHeader label="You’ll need" tag="not in your fridge" />
-            <div className="ing-list">
-              {recipe.need.map((name) => {
-                const isAdded = added.includes(name)
-                return (
-                  <div className="ing" key={name}>
-                    <span className="ing__dot">
-                      <span className="status-dot status-dot--bad" style={{ width: 7, height: 7 }} />
-                    </span>
-                    <span className="ing__name">{name}</span>
-                    <button
-                      type="button"
-                      className="ing__add"
-                      disabled={isAdded}
-                      onClick={() => {
-                        dispatch({ type: 'ADD_STAPLE', name })
-                        setAdded((a) => [...a, name])
-                      }}
-                    >
-                      {isAdded ? 'Added' : 'Add to list'}
-                    </button>
-                  </div>
-                )
-              })}
-            </div>
+          <div className="recipe2__stat">
+            <span className="recipe2__stat-k">Cook Time</span>
+            <span className="recipe2__stat-v">{recipe.minutes}m</span>
+          </div>
+          <div className="recipe2__stat">
+            <span className="recipe2__stat-k">Ingredients</span>
+            <span className="recipe2__stat-v">{recipe.ingredients.length}</span>
+          </div>
+          <div className="recipe2__stat">
+            <span className="recipe2__stat-k">Est. Calories</span>
+            <span className="recipe2__stat-v">{recipe.kcal}</span>
           </div>
         </div>
 
-        <div className="addon-card">
-          <Icon name="leaf" size={20} className="addon-card__icon" />
-          <div>
-            <div className="addon-card__title">Add {recipe.addOn.item.toLowerCase()}</div>
-            <p className="addon-card__copy">{recipe.addOn.copy}</p>
-            <button
-              type="button"
-              className="addon-card__btn"
-              disabled={addOnUsed}
-              onClick={() => setAddOnUsed(true)}
-            >
-              {addOnUsed ? (
-                <>
-                  <Icon name="check" size={13} /> Added in
-                </>
-              ) : (
-                <>
-                  <Icon name="plus" size={13} /> Work it in
-                </>
-              )}
-            </button>
-          </div>
+        <div className="recipe2__ing-head">
+          <h2 className="recipe2__h2">Ingredients</h2>
+          <button type="button" className="recipe2__addall" onClick={addAll}>
+            Add all
+          </button>
         </div>
-
-        <SectionHeader label="Method" tag={`${recipe.minutes} min · serves ${recipe.serves}`} />
-        <div>
-          {recipe.steps.map((text, i) => (
-            <Step key={`${recipe.id}-${i}`} n={i + 1} text={text} defaultOpen={i === 0} />
+        <div className="recipe2__ing-scroll">
+          {recipe.ingredients.map((ing) => (
+            <IngredientCard
+              key={ing.name}
+              ing={ing}
+              inFridge={fridgeNames.has(ing.name)}
+              added={added.includes(ing.name)}
+              onAdd={() => addToList(ing.name)}
+            />
           ))}
         </div>
 
-        <div style={{ display: 'flex', gap: 10, marginTop: 22 }}>
-          <Button full>
-            <Icon name="recipe" size={17} />
-            Start cooking
-          </Button>
-          <Button variant="ghost" onClick={anotherIdea}>
-            <Icon name="refresh" size={16} />
-            Another
-          </Button>
-        </div>
+        <h2 className="recipe2__h2 recipe2__steps-head">Cooking Steps</h2>
+        <ol className="recipe2__steps">
+          {recipe.steps.map((text, i) => (
+            <li className="cstep" key={`${recipe.id}-${i}`}>
+              <span className="cstep__n">{String(i + 1).padStart(2, '0')}</span>
+              <span className="cstep__text">{text}</span>
+            </li>
+          ))}
+        </ol>
 
-        <SectionHeader label="Was this a good call?" />
-        <div className="thumbs">
+        {asking && (
+          <div className="recipe2__ask-note">
+            <Icon name="sparkle" size={14} />
+            yoink! can swap any ingredient, scale the recipe, or suggest a side — ask away.
+          </div>
+        )}
+
+        <button type="button" className="recipe2__another" onClick={switchRecipe}>
+          <Icon name="refresh" size={15} />
+          Show another idea
+        </button>
+      </div>
+
+      <div className="recipe2__bar">
+        <div className="recipe2__serves">
           <button
             type="button"
-            className={`thumb ${feedback?.liked === true ? 'is-on--up' : ''}`}
-            onClick={() => rate(true)}
+            aria-label="Fewer servings"
+            onClick={() => setServes((s) => Math.max(1, s - 1))}
           >
-            <Icon name="thumb-up" size={18} />
-            Cook again
+            <Icon name="minus" size={15} />
           </button>
-          <button
-            type="button"
-            className={`thumb ${feedback?.liked === false ? 'is-on--down' : ''}`}
-            onClick={() => rate(false)}
-          >
-            <Icon name="thumb-down" size={18} />
-            Not for me
+          <span>Cooking for {serves}</span>
+          <button type="button" aria-label="More servings" onClick={() => setServes((s) => s + 1)}>
+            <Icon name="plus" size={15} />
           </button>
         </div>
-        {feedback && (
-          <p className="meta" style={{ textAlign: 'center', marginTop: 12 }}>
-            {feedback.liked
-              ? 'Noted — yoink! will lean into meals like this.'
-              : 'Got it — you’ll see fewer of these.'}
-          </p>
-        )}
+        <button
+          type="button"
+          className={`recipe2__ask ${asking ? 'is-on' : ''}`}
+          onClick={() => setAsking((v) => !v)}
+        >
+          <Icon name="sparkle" size={15} />
+          Ask
+        </button>
+        <button
+          type="button"
+          className="recipe2__cook"
+          onClick={() => {
+            setCooking(true)
+            dispatch({ type: 'RATE_RECIPE', title: recipe.title, liked: true, ingredientsUsed: recipe.ingredients.map((i) => i.name) })
+          }}
+        >
+          {cooking ? 'Cooking' : 'Cook'}
+        </button>
       </div>
     </div>
   )

@@ -81,65 +81,88 @@ function makeShopping() {
   ]
 }
 
-// Recipes reference inventory by name. `useDaysBadge` drives the expiry-priority
-// badge shown on the recipe screen.
+// Recipes are built around the detected fridge items so the ingredient cards
+// show real stickers. `ingredients` = { name, qty, pantry? } — pantry items
+// aren't expected to be in the fridge. Names match DETECTED where possible so
+// stickerFor() resolves.
 const RECIPES = [
   {
-    id: 'r-rigatoni',
-    title: 'Tomato Rigatoni',
-    blurb: 'A fast weeknight bowl that clears the tomatoes before they turn.',
+    id: 'r-broccoli-bowl',
+    title: 'Charred Broccoli & Egg Bowl',
+    image: 'recipe-broccoli-bowl.png',
+    blurb:
+      'A warm, grain-free bowl that clears the broccoli and eggs before they turn — ready in under half an hour.',
+    skill: 'Easy',
     minutes: 25,
     serves: 2,
-    uses: ['Heirloom Tomatoes', 'Rigatoni', 'Olive Oil', 'Spring Onions'],
-    need: ['Garlic', 'Parmesan'],
-    addOn: {
-      item: 'Baby Spinach',
-      copy: 'Wilt in a handful of spinach — you have a bag going soft in 2 days.',
-    },
+    kcal: 320,
+    ingredients: [
+      { name: 'Broccoli', qty: '1 head' },
+      { name: 'Eggs', qty: '4' },
+      { name: 'Cheddar', qty: '40 g' },
+      { name: 'Red Chillies', qty: '2' },
+      { name: 'Olive oil', qty: '2 tbsp', pantry: true },
+      { name: 'Garlic', qty: '3 cloves', pantry: true },
+    ],
     steps: [
-      'Boil the rigatoni in well-salted water until al dente, then save a mug of the pasta water.',
-      'While it cooks, halve the tomatoes and slice the spring onions.',
-      'Warm olive oil in a wide pan, add garlic and tomatoes, and cook down for 8 minutes until jammy.',
-      'Add the drained pasta and a splash of pasta water, tossing until the sauce coats every piece.',
-      'Off the heat, fold through spinach and grated parmesan. Season and serve.',
+      'Cut the broccoli into small florets. Bring a pan of salted water to the boil and blanch for 2 minutes, then drain well.',
+      'Heat the olive oil in a wide frying pan over high heat. Add the broccoli in one layer and leave it to char for 3–4 minutes before tossing.',
+      'Push the broccoli aside, add the sliced garlic and chillies, and cook for 1 minute until fragrant.',
+      'Make four gaps in the pan and crack in the eggs. Cover and cook for 3 minutes until the whites are set.',
+      'Grate over the cheddar, season, and serve straight from the pan.',
     ],
   },
   {
-    id: 'r-salmon',
-    title: 'Salmon & Pepper Traybake',
-    blurb: 'One tray, thirty minutes, and the salmon gets used on its last good day.',
-    minutes: 30,
+    id: 'r-avo-toast',
+    title: 'Tomato & Avocado Sourdough',
+    image: 'recipe-avo-toast.png',
+    blurb:
+      'Uses the sourdough on its last good day and the avocado at peak ripeness. Weekend breakfast, ten minutes.',
+    skill: 'Easy',
+    minutes: 10,
     serves: 2,
-    uses: ['Salmon Fillet', 'Red Bell Pepper', 'Carrots', 'Olive Oil'],
-    need: ['Lemon'],
-    addOn: {
-      item: 'Baby Spinach',
-      copy: 'Stir raw spinach through the warm vegetables so it just wilts.',
-    },
+    kcal: 410,
+    ingredients: [
+      { name: 'Sourdough Loaf', qty: '4 slices' },
+      { name: 'Avocado', qty: '2' },
+      { name: 'Heirloom Tomatoes', qty: '3' },
+      { name: 'Eggs', qty: '2' },
+      { name: 'Red Chillies', qty: '1' },
+      { name: 'Lemon', qty: '1/2', pantry: true },
+      { name: 'Olive oil', qty: '1 tbsp', pantry: true },
+    ],
     steps: [
-      'Heat the oven to 210°C. Cut peppers and carrots into thin strips.',
-      'Toss the vegetables with olive oil and salt on a tray, roast for 12 minutes.',
-      'Nestle the salmon fillets in, squeeze over lemon, and roast 12 minutes more.',
-      'Pile onto plates and finish with the spinach and pan juices.',
+      'Toast the sourdough slices until deeply golden.',
+      'Mash the avocado with a squeeze of lemon and a pinch of salt. Slice the tomatoes and chilli thinly.',
+      'Poach or fry the eggs to your liking.',
+      'Spread the avocado over the toast, layer on the tomatoes, and top each with an egg.',
+      'Scatter over the chilli, drizzle with olive oil, and finish with flaky salt.',
     ],
   },
   {
-    id: 'r-curry',
-    title: 'Chicken & Chickpea Curry',
-    blurb: 'Uses the chicken thighs on time and leans on pantry cans for the rest.',
-    minutes: 35,
-    serves: 3,
-    uses: ['Chicken Thighs', 'Canned Chickpeas', 'Carrots', 'Soy Sauce', 'Jasmine Rice'],
-    need: ['Coconut Milk', 'Curry Paste'],
-    addOn: {
-      item: 'Baby Spinach',
-      copy: 'Drop spinach in for the last two minutes so it keeps its colour.',
-    },
+    id: 'r-radish-salad',
+    title: 'Crunchy Radish & Romaine Salad',
+    image: 'recipe-radish-salad.png',
+    blurb:
+      'A sharp, cold salad that gets the radishes and lettuce used up while they’re still crisp.',
+    skill: 'Easy',
+    minutes: 15,
+    serves: 4,
+    kcal: 240,
+    ingredients: [
+      { name: 'Radishes', qty: '1 bunch' },
+      { name: 'Romaine Lettuce', qty: '1 head' },
+      { name: 'Avocado', qty: '1' },
+      { name: 'Cheddar', qty: '30 g' },
+      { name: 'Lemon', qty: '1', pantry: true },
+      { name: 'Olive oil', qty: '3 tbsp', pantry: true },
+    ],
     steps: [
-      'Start the rice. Dice the chicken and chop the carrots.',
-      'Brown the chicken in a deep pan, then stir in the curry paste for a minute.',
-      'Add coconut milk, chickpeas, carrots and a splash of soy. Simmer 15 minutes.',
-      'Stir spinach through at the end and serve over the rice.',
+      'Thinly slice the radishes and tear the romaine into bite-sized pieces. Chill both for 10 minutes.',
+      'Whisk the lemon juice with the olive oil, salt and pepper to make a quick dressing.',
+      'Dice the avocado and shave the cheddar with a peeler.',
+      'Toss the leaves and radishes with most of the dressing, then fold through the avocado.',
+      'Top with the shaved cheddar and the last of the dressing.',
     ],
   },
 ]
@@ -193,12 +216,39 @@ const STICKER_ALIASES = {
   'Red Bell Pepper': 'chili.png',
   Butter: 'cheese.png',
   Carrots: 'radish.png',
-  Milk: 'cheese.png',
-  'Greek Yogurt': 'cheese.png',
 }
 export function stickerFor(name) {
   const hit = DETECTED.find((d) => d.name === name)
   return hit?.sticker || STICKER_ALIASES[name] || null
+}
+
+// The "added automatically" shopping rows, derived from the detected fridge
+// items that will run out soonest — so the shopping list stays in step with
+// what My Fridge shows.
+export function detectedShopping() {
+  return DETECTED.map((d) => {
+    const emptyDays = d.perWeek > 0 ? (d.qty / d.perWeek) * 7 : Infinity
+    return { d, days: Math.min(d.daysToExpiry, emptyDays) }
+  })
+    .sort((a, b) => a.days - b.days)
+    .slice(0, 4)
+    .map(({ d, days }) => ({
+      id: id('shp'),
+      name: d.name,
+      source: 'auto',
+      reason:
+        days < 1
+          ? 'Runs out today'
+          : days < 2
+            ? 'Runs out tomorrow'
+            : days < 7
+              ? `Runs out in ${Math.round(days)} days`
+              : 'Running low',
+      urgency: days <= 2 ? 'bad' : 'warn',
+      qty: Math.max(1, Math.round(d.qty)),
+      unit: d.unit,
+      status: 'pending',
+    }))
 }
 
 export function seedState() {
