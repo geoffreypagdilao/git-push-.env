@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from cv.detector import Detector
 
-from category_map import DETECTOR_CLASS_NAMES, category_for
+from category_map import DETECTOR_CLASS_NAMES, canonical_name, category_for
 
 load_dotenv()
 
@@ -29,8 +29,9 @@ def diff_counts(previous_counts, current_counts):
             continue
         event_type = "added" if delta > 0 else "removed"
         category = category_for(name)
+        payload_name = canonical_name(name)
         for _ in range(abs(delta)):
-            items.append({"name": name, "category": category, "event_type": event_type})
+            items.append({"name": payload_name, "category": category, "event_type": event_type})
     return items
 
 
