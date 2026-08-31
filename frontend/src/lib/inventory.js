@@ -4,6 +4,44 @@ import { CATEGORY_ORDER } from './mockData'
 
 const DAY = 86_400_000
 
+// Adapt a raw `items` row from the backend (id, name, category, quantity,
+// unit, expiry_date, first_detected_at, ...) into the shape the UI works
+// with. perWeek starts null — the backend doesn't return a learned rate on
+// the list endpoint, so it's filled in lazily (see estimateConsumption)
+// only when an item's detail sheet is opened.
+export function adaptItem(row) {
+  const addedDaysAgo = row.first_detected_at
+    ? Math.max(0, Math.floor((Date.now() - new Date(row.first_detected_at).getTime()) / DAY))
+    : 0
+  return {
+    id: row.id,
+    name: row.name,
+    category: row.category,
+    qty: Number(row.quantity) || 0,
+    unit: row.unit,
+    expiryDate: row.expiry_date || null,
+    addedDaysAgo,
+    perWeek: null,
+  }
+}
+
+// Same "average gap between removals" logic as agent/consumption.py's
+// get_consumption_rate, run client-side against /inventory/{id}/log so the
+// item-detail sheet can show a learned pace without a dedicated endpoint.
+const MIN_DATA_POINTS = 2
+
+export function estimateConsumption(log) {
+  const removals = (log || [])
+    .filter((e) => e.event_type === 'removed')
+    .map((e) => new Date(e.detected_at).getTime())
+    .sort((a, b) => a - b)
+  if (removals.length < MIN_DATA_POINTS) return null
+  const gaps = []
+  for (let i = 1; i < removals.length; i++) gaps.push((removals[i] - removals[i - 1]) / DAY)
+  const rateDays = gaps.reduce((a, b) => a + b, 0) / gaps.length
+  return { rateDays, perWeek: rateDays > 0 ? 7 / rateDays : null }
+}
+
 // Group inventory into [category, items[]] pairs in a stable display order.
 export function groupByCategory(items) {
   const groups = new Map()

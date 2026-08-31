@@ -1,21 +1,35 @@
-import { createContext, useContext, useEffect, useMemo, useReducer } from 'react'
-import { seedState, newId, detectedInventory, detectedShopping } from './mockData'
+import { createContext, useCallback, useContext, useEffect, useMemo, useReducer } from 'react'
+import * as api from './api'
+import { adaptItem } from './inventory'
 
-const KEY = 'yoink.state'
-const DAY = 86_400_000
+// All inventory/shopping data comes from the backend (see lib/api.js) — this
+// store just holds it in React state and exposes actions that call the API
+// then patch local state from the real response. Only a few UI-only settings
+// (onboarding-seen, autonomy mode, chosen cart) persist to localStorage,
+// since the DB has no columns for them yet (see forxp.md §10.2).
+
+const SETTINGS_KEY = 'yoink.settings'
 
 const StoreContext = createContext(null)
 
-function load() {
+function loadSettings() {
   try {
-    const raw = localStorage.getItem(KEY)
-    if (!raw) return seedState()
-    const parsed = JSON.parse(raw)
-    const fresh = seedState()
-    if (parsed.version !== fresh.version) return fresh
-    return parsed
+    const raw = localStorage.getItem(SETTINGS_KEY)
+    if (!raw) throw new Error('no settings yet')
+    return { onboarded: false, autonomy: 'suggest', cart: 'redmart', ...JSON.parse(raw) }
   } catch {
-    return seedState()
+    return { onboarded: false, autonomy: 'suggest', cart: 'redmart' }
+  }
+}
+
+function initState() {
+  return {
+    ...loadSettings(),
+    inventory: [],
+    shopping: [],
+    lastSent: null,
+    inventoryLoaded: false,
+    shoppingLoaded: false,
   }
 }
 
@@ -24,116 +38,42 @@ function reducer(state, action) {
     case 'COMPLETE_ONBOARDING':
       return { ...state, onboarded: true }
 
-    // Baseline scan confirmed: the detected ingredients become the fresh
-    // inventory; seeded pantry staples stay. The auto shopping rows are
-    // rebuilt from those same items so the two screens agree.
-    case 'CONFIRM_BASELINE':
-      return {
-        ...state,
-        onboarded: true,
-        inventory: [...detectedInventory(), ...state.inventory.filter((i) => i.section === 'pantry')],
-        shopping: [...detectedShopping(), ...state.shopping.filter((s) => s.source === 'manual')],
-      }
-
-    case 'REMOVE_ITEM':
-      return { ...state, inventory: state.inventory.filter((i) => i.id !== action.id) }
-
-    case 'ADD_ITEM': {
-      const name = action.name.trim()
-      if (!name) return state
-      const item = {
-        id: newId('itm'),
-        name,
-        category: action.category || 'Vegetables',
-        section: action.section || 'fresh',
-        qty: 1,
-        unit: 'pcs',
-        addedDaysAgo: 0,
-        shelfLifeDays: null,
-        expiryDate: null,
-        perWeek: 1,
-      }
-      return { ...state, inventory: [item, ...state.inventory] }
-    }
-
-    case 'SET_QTY':
-      return {
-        ...state,
-        inventory: state.inventory.map((i) =>
-          i.id === action.id ? { ...i, qty: Math.max(0, action.qty) } : i,
-        ),
-      }
-
-    case 'TAG_EXPIRY':
-      return {
-        ...state,
-        inventory: state.inventory.map((i) =>
-          i.id === action.id
-            ? {
-                ...i,
-                shelfLifeDays: action.days,
-                expiryDate: new Date(Date.now() + action.days * DAY).toISOString().slice(0, 10),
-              }
-            : i,
-        ),
-      }
-
-    case 'DISMISS_SHOPPING':
-      return { ...state, shopping: state.shopping.filter((s) => s.id !== action.id) }
-
-    case 'SET_SHOPPING_QTY':
-      return {
-        ...state,
-        shopping: state.shopping.map((s) =>
-          s.id === action.id ? { ...s, qty: Math.max(1, action.qty) } : s,
-        ),
-      }
-
-    case 'ADD_STAPLE': {
-      const name = action.name.trim()
-      if (!name) return state
-      return {
-        ...state,
-        shopping: [
-          ...state.shopping,
-          { id: newId('shp'), name, source: 'manual', reason: 'Staple', qty: 1, unit: 'pcs', status: 'pending' },
-        ],
-      }
-    }
+    case 'SET_AUTONOMY':
+      return { ...state, autonomy: action.mode }
 
     case 'SET_CART':
       return { ...state, cart: action.cart }
 
-    case 'SET_AUTONOMY':
-      return { ...state, autonomy: action.mode }
+    case 'SET_INVENTORY':
+      return { ...state, inventory: action.items.map(adaptItem), inventoryLoaded: true }
 
-    case 'SEND_CART': {
-      const count = state.shopping.filter((s) => s.status === 'pending').length
+    case 'PATCH_INVENTORY_ITEM':
       return {
         ...state,
-        shopping: state.shopping.map((s) =>
-          s.status === 'pending' ? { ...s, status: 'in_cart' } : s,
-        ),
-        lastSent: { cart: state.cart, count, at: Date.now() },
+        inventory: state.inventory.map((i) => (i.id === action.id ? adaptItem(action.row) : i)),
+      }
+
+    case 'REMOVE_INVENTORY_ITEM':
+      return { ...state, inventory: state.inventory.filter((i) => i.id !== action.id) }
+
+    case 'SET_SHOPPING':
+      return { ...state, shopping: action.entries, shoppingLoaded: true }
+
+    case 'UPSERT_SHOPPING_ENTRY': {
+      const exists = state.shopping.some((s) => s.id === action.entry.id)
+      return {
+        ...state,
+        shopping: exists
+          ? state.shopping.map((s) => (s.id === action.entry.id ? action.entry : s))
+          : [action.entry, ...state.shopping],
       }
     }
 
-    case 'RATE_RECIPE': {
-      const entry = {
-        id: newId('fb'),
-        recipe_title: action.title,
-        liked: action.liked,
-        ingredients_used: action.ingredientsUsed || [],
-        at: Date.now(),
-      }
-      return {
-        ...state,
-        recipeFeedback: [entry, ...state.recipeFeedback.filter((f) => f.recipe_title !== action.title)],
-      }
-    }
+    case 'REMOVE_SHOPPING_ENTRY':
+      return { ...state, shopping: state.shopping.filter((s) => s.id !== action.id) }
 
-    case 'RESET_DEMO':
-      return seedState()
+    case 'SET_LAST_SENT':
+      return { ...state, lastSent: action.lastSent }
 
     default:
       return state
@@ -141,17 +81,92 @@ function reducer(state, action) {
 }
 
 export function StoreProvider({ children }) {
-  const [state, dispatch] = useReducer(reducer, undefined, load)
+  const [state, dispatch] = useReducer(reducer, undefined, initState)
 
   useEffect(() => {
-    try {
-      localStorage.setItem(KEY, JSON.stringify(state))
-    } catch {
-      /* private mode / quota — the demo still works in-memory */
-    }
-  }, [state])
+    const { onboarded, autonomy, cart } = state
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ onboarded, autonomy, cart }))
+  }, [state.onboarded, state.autonomy, state.cart])
 
-  const value = useMemo(() => ({ state, dispatch }), [state])
+  const refreshInventory = useCallback(async () => {
+    const items = await api.fetchInventory()
+    dispatch({ type: 'SET_INVENTORY', items })
+    return items
+  }, [])
+
+  const refreshShopping = useCallback(async () => {
+    const entries = await api.fetchShoppingList()
+    dispatch({ type: 'SET_SHOPPING', entries })
+    return entries
+  }, [])
+
+  useEffect(() => {
+    refreshInventory().catch((err) => console.error('Failed to load inventory:', err))
+    refreshShopping().catch((err) => console.error('Failed to load shopping list:', err))
+  }, [refreshInventory, refreshShopping])
+
+  const actions = useMemo(
+    () => ({
+      removeItem: async (id) => {
+        await api.deleteItem(id)
+        dispatch({ type: 'REMOVE_INVENTORY_ITEM', id })
+      },
+
+      setQty: async (id, qty) => {
+        const row = await api.updateItem(id, { quantity: Math.max(0, qty) })
+        dispatch({ type: 'PATCH_INVENTORY_ITEM', id, row })
+      },
+
+      tagExpiry: async (id, days) => {
+        const expiryDate = new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10)
+        const row = await api.updateItem(id, { expiry_date: expiryDate })
+        dispatch({ type: 'PATCH_INVENTORY_ITEM', id, row })
+      },
+
+      addStaple: async (name) => {
+        const trimmed = name.trim()
+        if (!trimmed) return
+        const entry = await api.stageShoppingItem({ itemName: trimmed })
+        dispatch({ type: 'UPSERT_SHOPPING_ENTRY', entry })
+      },
+
+      dismissShopping: async (id) => {
+        await api.removeShoppingEntry(id)
+        dispatch({ type: 'REMOVE_SHOPPING_ENTRY', id })
+      },
+
+      setShoppingStatus: async (id, status) => {
+        const entry = await api.updateShoppingStatus(id, status)
+        dispatch({ type: 'UPSERT_SHOPPING_ENTRY', entry })
+      },
+
+      sendCart: async () => {
+        const pending = state.shopping.filter((s) => s.status === 'pending')
+        const updated = await Promise.all(pending.map((s) => api.updateShoppingStatus(s.id, 'in_cart')))
+        updated.forEach((entry) => dispatch({ type: 'UPSERT_SHOPPING_ENTRY', entry }))
+        dispatch({ type: 'SET_LAST_SENT', lastSent: { cart: state.cart, count: pending.length, at: Date.now() } })
+      },
+
+      runAgentSweep: async (mode) => {
+        const result = await api.runAgentSweep(mode)
+        await Promise.all([refreshInventory(), refreshShopping()])
+        return result
+      },
+
+      runAgentForItem: async (name, mode) => {
+        const result = await api.runAgentForItem(name, mode)
+        await Promise.all([refreshInventory(), refreshShopping()])
+        return result
+      },
+    }),
+    [state.shopping, state.cart, refreshInventory, refreshShopping],
+  )
+
+  const value = useMemo(
+    () => ({ state, dispatch, refreshInventory, refreshShopping, ...actions }),
+    [state, refreshInventory, refreshShopping, actions],
+  )
+
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>
 }
 

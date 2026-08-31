@@ -1,13 +1,12 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import TopBar from '../components/TopBar'
 import Button from '../components/Button'
 import Icon from '../components/Icon'
 import SectionHeader from '../components/SectionHeader'
-import StatusDot from '../components/StatusDot'
-import Stepper from '../components/Stepper'
+import { AddChip } from '../components/Chip'
 import { useStore } from '../lib/store'
 import { CARTS, stickerFor } from '../lib/mockData'
-import { plural } from '../lib/inventory'
+import { plural, relativeAdded } from '../lib/inventory'
 
 function StickerTile({ name, children }) {
   const sticker = stickerFor(name)
@@ -23,31 +22,25 @@ function StickerTile({ name, children }) {
   )
 }
 
-function ShopRow({ entry, dispatch, auto }) {
+function relativeSince(iso) {
+  if (!iso) return ''
+  const days = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000))
+  return relativeAdded(days)
+}
+
+function PendingRow({ entry, onPurchase, onDismiss }) {
   return (
     <div className="shop-row">
-      <StickerTile name={entry.name}>
-        {auto && <StatusDot status={entry.urgency || 'warn'} size={11} />}
-      </StickerTile>
+      <StickerTile name={entry.item_name} />
       <div className="shop-row__body">
-        <div className="shop-row__name">{entry.name}</div>
-        <div className={`shop-row__why ${auto ? 'shop-row__why--auto' : ''}`}>
-          {auto && <Icon name="sparkle" size={13} />}
-          {auto ? entry.reason : 'Always on hand'}
-        </div>
+        <div className="shop-row__name">{entry.item_name}</div>
+        <div className="shop-row__why">Staged {relativeSince(entry.staged_at)}</div>
       </div>
       <div className="shop-row__actions">
-        <Stepper
-          value={entry.qty}
-          unit={entry.unit}
-          onChange={(qty) => dispatch({ type: 'SET_SHOPPING_QTY', id: entry.id, qty })}
-        />
-        <button
-          type="button"
-          className="shop-row__dismiss"
-          aria-label={`Remove ${entry.name}`}
-          onClick={() => dispatch({ type: 'DISMISS_SHOPPING', id: entry.id })}
-        >
+        <Button variant="ghost" onClick={onPurchase}>
+          Purchased
+        </Button>
+        <button type="button" className="shop-row__dismiss" aria-label={`Remove ${entry.item_name}`} onClick={onDismiss}>
           <Icon name="close" size={16} />
         </button>
       </div>
@@ -56,11 +49,19 @@ function ShopRow({ entry, dispatch, auto }) {
 }
 
 export default function ShoppingList() {
-  const { state, dispatch } = useStore()
+  const { state, addStaple, dismissShopping, setShoppingStatus, sendCart } = useStore()
+  const [showAllPurchased, setShowAllPurchased] = useState(false)
 
   const pending = useMemo(() => state.shopping.filter((s) => s.status === 'pending'), [state.shopping])
   const inCart = useMemo(() => state.shopping.filter((s) => s.status === 'in_cart'), [state.shopping])
-  const auto = pending.filter((s) => s.source === 'auto')
+  const purchased = useMemo(
+    () =>
+      state.shopping
+        .filter((s) => s.status === 'purchased')
+        .sort((a, b) => new Date(b.confirmed_at || 0) - new Date(a.confirmed_at || 0)),
+    [state.shopping],
+  )
+  const purchasedShown = showAllPurchased ? purchased : purchased.slice(0, 3)
 
   const cart = CARTS.find((c) => c.id === state.cart) || CARTS[1]
   const sentCart = CARTS.find((c) => c.id === state.lastSent?.cart)
@@ -74,20 +75,27 @@ export default function ShoppingList() {
         <p className="meta" style={{ marginTop: 8 }}>
           {pending.length === 0 && inCart.length > 0
             ? `${plural(inCart.length, 'item')} on the way to ${sentCart?.label || cart.label}`
-            : `${auto.length} auto-added`}
+            : `${plural(pending.length, 'item')} to buy`}
         </p>
 
         <div className="shop-cols">
-          {auto.length > 0 && (
-            <div className="shop-col">
-              <SectionHeader label="Added automatically" />
+          <div className="shop-col">
+            <SectionHeader label="To buy" action={<AddChip onAdd={addStaple} placeholder="Add an item" />} />
+            {pending.length > 0 ? (
               <div className="shop-block">
-                {auto.map((e) => (
-                  <ShopRow key={e.id} entry={e} dispatch={dispatch} auto />
+                {pending.map((e) => (
+                  <PendingRow
+                    key={e.id}
+                    entry={e}
+                    onPurchase={() => setShoppingStatus(e.id, 'purchased')}
+                    onDismiss={() => dismissShopping(e.id)}
+                  />
                 ))}
               </div>
-            </div>
-          )}
+            ) : (
+              <p className="muted-note">List’s clear. yoink! refills it as things run low.</p>
+            )}
+          </div>
         </div>
 
         {inCart.length > 0 && (
@@ -96,16 +104,14 @@ export default function ShoppingList() {
             <div className="shop-block">
               {inCart.map((e) => (
                 <div className="shop-row shop-row--sent" key={e.id}>
-                  <StickerTile name={e.name}>
+                  <StickerTile name={e.item_name}>
                     <span className="shop-row__done">
                       <Icon name="check" size={11} />
                     </span>
                   </StickerTile>
                   <div className="shop-row__body">
-                    <div className="shop-row__name">{e.name}</div>
-                    <div className="shop-row__why">
-                      {e.qty} {e.unit}
-                    </div>
+                    <div className="shop-row__name">{e.item_name}</div>
+                    <div className="shop-row__why">Sent {relativeSince(e.staged_at)}</div>
                   </div>
                 </div>
               ))}
@@ -113,8 +119,35 @@ export default function ShoppingList() {
           </>
         )}
 
-        {pending.length === 0 && inCart.length === 0 && (
-          <p className="muted-note">List’s clear. yoink! refills it as things run low.</p>
+        {purchased.length > 0 && (
+          <>
+            <SectionHeader label="Purchased" tag={`${purchased.length}`} />
+            <div className="shop-block">
+              {purchasedShown.map((e) => (
+                <div className="shop-row shop-row--sent" key={e.id}>
+                  <StickerTile name={e.item_name}>
+                    <span className="shop-row__done">
+                      <Icon name="check" size={11} />
+                    </span>
+                  </StickerTile>
+                  <div className="shop-row__body">
+                    <div className="shop-row__name">{e.item_name}</div>
+                    <div className="shop-row__why">Bought {relativeSince(e.confirmed_at)}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {purchased.length > 3 && (
+              <button
+                type="button"
+                className="section-header__link"
+                style={{ marginTop: 8 }}
+                onClick={() => setShowAllPurchased((v) => !v)}
+              >
+                {showAllPurchased ? 'Show less' : `Show all ${purchased.length}`}
+              </button>
+            )}
+          </>
         )}
 
         <div className="shop-send">
@@ -124,7 +157,7 @@ export default function ShoppingList() {
               Sent {plural(state.lastSent.count, 'item')} to {sentCart?.label}
             </div>
           ) : (
-            <Button full disabled={pending.length === 0} onClick={() => dispatch({ type: 'SEND_CART' })}>
+            <Button full disabled={pending.length === 0} onClick={sendCart}>
               Send {plural(pending.length, 'item')} to {cart.label}
             </Button>
           )}

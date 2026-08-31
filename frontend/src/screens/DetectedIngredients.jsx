@@ -3,11 +3,11 @@ import Button from '../components/Button'
 import Icon from '../components/Icon'
 import { useNav } from '../lib/navigation'
 import { useStore } from '../lib/store'
-import { DETECTED } from '../lib/mockData'
+import { stickerFor } from '../lib/mockData'
 
 // Scatter placement for the detected-ingredient stickers — placed by hand
-// with the drag editor. left/top are % of the stage, matched by index to
-// DETECTED (which is sticker order from mockData).
+// with the drag editor. left/top are % of the stage. Reused positionally for
+// however many real items come back from the DB (extra spots just go unused).
 const SPOTS = [
   { left: 40.5, top: 44.1, size: 118, rot: -7 },
   { left: 42.4, top: 24.6, size: 104, rot: 11 },
@@ -24,10 +24,11 @@ const stickerUrl = (file) => `${import.meta.env.BASE_URL}stickers/${file}`
 
 export default function DetectedIngredients() {
   const nav = useNav()
-  const { dispatch } = useStore()
+  const { state, dispatch } = useStore()
+  const items = state.inventory
 
   const confirm = () => {
-    dispatch({ type: 'CONFIRM_BASELINE' })
+    dispatch({ type: 'COMPLETE_ONBOARDING' })
     nav.go('fridge', { justOnboarded: true })
   }
 
@@ -36,39 +37,50 @@ export default function DetectedIngredients() {
       <TopBar onBack={() => nav.replace('scan')} title="Scan complete" />
 
       <div className="screen__scroll screen__scroll--cta">
-        <p className="lead-count">{DETECTED.length} ingredients detected</p>
+        <p className="lead-count">{items.length} ingredients detected</p>
         <p className="lead-sub">
-          Here’s what yoink! spotted in your fridge. Confirm to start tracking them.
+          Here’s what yoink! is tracking in your fridge right now. Confirm to keep an eye on them.
         </p>
 
-        <div className="detected__stage">
-          {DETECTED.map((d, i) => {
-            const spot = SPOTS[i] || SPOTS[0]
-            return (
-              <img
-                key={d.name}
-                className="sticker"
-                src={stickerUrl(d.sticker)}
-                alt={d.name}
-                style={{
-                  left: `${spot.left}%`,
-                  top: `${spot.top}%`,
-                  width: `${spot.size}px`,
-                  '--rotation': `${spot.rot}deg`,
-                }}
-              />
-            )
-          })}
-        </div>
+        {items.length > 0 ? (
+          <>
+            <div className="detected__stage">
+              {items.map((item, i) => {
+                const spot = SPOTS[i % SPOTS.length]
+                const sticker = stickerFor(item.name)
+                if (!sticker) return null
+                return (
+                  <img
+                    key={item.id}
+                    className="sticker"
+                    src={stickerUrl(sticker)}
+                    alt={item.name}
+                    style={{
+                      left: `${spot.left}%`,
+                      top: `${spot.top}%`,
+                      width: `${spot.size}px`,
+                      '--rotation': `${spot.rot}deg`,
+                    }}
+                  />
+                )
+              })}
+            </div>
 
-        <ul className="detected__list">
-          {DETECTED.map((d) => (
-            <li key={d.name}>
-              <Icon name="check" size={13} />
-              {d.name}
-            </li>
-          ))}
-        </ul>
+            <ul className="detected__list">
+              {items.map((item) => (
+                <li key={item.id}>
+                  <Icon name="check" size={13} />
+                  {item.name}
+                </li>
+              ))}
+            </ul>
+          </>
+        ) : (
+          <p className="muted-note">
+            Nothing tracked in the fridge yet — you can still continue, and yoink! will pick up items as the
+            camera detects them.
+          </p>
+        )}
       </div>
 
       <div className="cta-bar">

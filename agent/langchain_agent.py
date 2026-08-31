@@ -33,12 +33,20 @@ MAX_LLM_RETRIES = 1
 NOTIFICATION_COOLDOWN_MINUTES = 60
 
 
-def _get_llm() -> ChatOpenAI:
+def _get_llm(*, max_tokens: int | None = None, model: str | None = None) -> ChatOpenAI:
     api_key = os.environ.get("OPENROUTER_API_KEY")
     if not api_key:
         raise RuntimeError("OPENROUTER_API_KEY is not set in the environment.")
-    model = os.environ.get("OPENROUTER_MODEL", DEFAULT_MODEL)
-    return ChatOpenAI(model=model, api_key=api_key, base_url=OPENROUTER_BASE_URL)
+    # model override lets a caller (e.g. recipe generation, a pure structured-
+    # output task with no tool-calling) pick a faster model than the
+    # OPENROUTER_MODEL/DEFAULT_MODEL used for the actual decide-and-act agent.
+    model = model or os.environ.get("OPENROUTER_MODEL", DEFAULT_MODEL)
+    # max_tokens is left unset (provider default) unless a caller asks for a
+    # cap — with_structured_output callers want one, since an unset max_tokens
+    # otherwise defaults to the model's full context ceiling, which can
+    # exceed the OpenRouter account's remaining credit balance.
+    kwargs = {"max_tokens": max_tokens} if max_tokens is not None else {}
+    return ChatOpenAI(model=model, api_key=api_key, base_url=OPENROUTER_BASE_URL, **kwargs)
 
 
 def _get_item_context(item_name: str) -> dict:

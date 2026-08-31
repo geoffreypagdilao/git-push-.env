@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import TopBar from '../components/TopBar'
 import Icon from '../components/Icon'
 import Button from '../components/Button'
@@ -7,7 +7,8 @@ import SectionHeader from '../components/SectionHeader'
 import ItemRow from '../components/ItemRow'
 import { useNav } from '../lib/navigation'
 import { useStore } from '../lib/store'
-import { stickerFor } from '../lib/mockData'
+import { stickerFor, categoryLabel } from '../lib/mockData'
+import * as api from '../lib/api'
 import {
   statusOf,
   isUseSoon,
@@ -19,6 +20,7 @@ import {
   freshnessLabel,
   plural,
   groupByCategory,
+  estimateConsumption,
 } from '../lib/inventory'
 
 const urgency = (i) => Math.min(daysUntilEmpty(i), daysUntilExpiry(i) ?? Infinity)
@@ -35,16 +37,14 @@ function countdownLabel(item) {
 
 export default function MyFridge({ justOnboarded = false }) {
   const nav = useNav()
-  const { state, dispatch } = useStore()
+  const { state, dispatch, addStaple, runAgentSweep } = useStore()
   const [detail, setDetail] = useState(null)
   const [settings, setSettings] = useState(false)
   const [showPayoff, setShowPayoff] = useState(justOnboarded)
+  const [agentBusy, setAgentBusy] = useState(false)
+  const [agentResult, setAgentResult] = useState(null)
 
-  // The camera only sees the fridge, so the app tracks fresh items only for now.
-  const items = useMemo(
-    () => state.inventory.filter((i) => i.section === 'fresh'),
-    [state.inventory],
-  )
+  const items = state.inventory
   // Soonest-to-go items, for the expiry countdown. Falls back from the strict
   // "use soon" set to the 4 nearest so the list always has some depth.
   const useSoon = useMemo(() => {
@@ -55,6 +55,19 @@ export default function MyFridge({ justOnboarded = false }) {
     return (alerting.length >= 4 ? alerting : ranked).slice(0, 4)
   }, [items])
   const groups = useMemo(() => groupByCategory(items), [items])
+
+  const runCheck = async () => {
+    setAgentBusy(true)
+    setAgentResult(null)
+    try {
+      const result = await runAgentSweep(state.autonomy)
+      setAgentResult({ message: result.final_message, error: !!result.error })
+    } catch (err) {
+      setAgentResult({ message: err.message, error: true })
+    } finally {
+      setAgentBusy(false)
+    }
+  }
 
   return (
     <div className="screen">
@@ -75,9 +88,7 @@ export default function MyFridge({ justOnboarded = false }) {
       <div className="screen__scroll">
         <div className="fridge__head">
           <h1 className="display">My Fridge</h1>
-          <p className="meta fridge__updated">
-            {plural(items.length, 'item')} · updated 2m ago
-          </p>
+          <p className="meta fridge__updated">{plural(items.length, 'item')} · from the tracked fridge</p>
         </div>
 
         {showPayoff && (
@@ -91,6 +102,29 @@ export default function MyFridge({ justOnboarded = false }) {
               type="button"
               className="payoff__close"
               onClick={() => setShowPayoff(false)}
+              aria-label="Dismiss"
+            >
+              <Icon name="close" size={16} />
+            </button>
+          </div>
+        )}
+
+        <Button variant="ghost" full onClick={runCheck} disabled={agentBusy}>
+          <Icon name="sparkle" size={17} />
+          {agentBusy ? 'Checking your fridge…' : 'Run agent check now'}
+        </Button>
+
+        {agentResult && (
+          <div className="payoff" style={{ marginTop: 10 }}>
+            <Icon name={agentResult.error ? 'close' : 'sparkle'} size={20} className="payoff__icon" />
+            <div className="payoff__text">
+              <strong>{agentResult.error ? 'Something went wrong' : 'Agent check complete'}</strong>
+              <span>{agentResult.message}</span>
+            </div>
+            <button
+              type="button"
+              className="payoff__close"
+              onClick={() => setAgentResult(null)}
               aria-label="Dismiss"
             >
               <Icon name="close" size={16} />
@@ -122,7 +156,7 @@ export default function MyFridge({ justOnboarded = false }) {
                     </span>
                     <span className="countdown__body">
                       <span className="countdown__name">{item.name}</span>
-                      <span className="countdown__cat">{item.category}</span>
+                      <span className="countdown__cat">{categoryLabel(item.category)}</span>
                     </span>
                     {urgent && (
                       <span className={`countdown__bang countdown__bang--${status}`} aria-hidden="true">
@@ -140,13 +174,13 @@ export default function MyFridge({ justOnboarded = false }) {
         )}
 
         <div className="cat-grid">
-          {groups.map(([category, items]) => (
+          {groups.map(([category, items], idx) => (
             <div key={category} className="cat-col">
               <SectionHeader
-                label={category}
-                tag={category === 'Vegetables' ? null : `${items.length}`}
+                label={categoryLabel(category)}
+                tag={`${items.length}`}
                 action={
-                  category === 'Vegetables' ? (
+                  idx === 0 ? (
                     <button
                       type="button"
                       className="section-header__link"
@@ -166,14 +200,16 @@ export default function MyFridge({ justOnboarded = false }) {
           ))}
         </div>
 
-        {items.length === 0 && (
-          <p className="muted-note">Nothing here yet — yoink! adds items as they go in.</p>
+        {items.length === 0 && state.inventoryLoaded && (
+          <p className="muted-note">Nothing tracked yet — yoink! adds items as the fridge camera detects them.</p>
         )}
       </div>
 
       {/* item detail */}
       <Sheet open={!!detail} title={detail?.name || ''} onClose={() => setDetail(null)}>
-        {detail && <ItemDetail item={detail} dispatch={dispatch} onClose={() => setDetail(null)} nav={nav} />}
+        {detail && (
+          <ItemDetail item={detail} addStaple={addStaple} onClose={() => setDetail(null)} nav={nav} />
+        )}
       </Sheet>
 
       {/* settings */}
@@ -181,84 +217,69 @@ export default function MyFridge({ justOnboarded = false }) {
         <div className="set-row">
           <div className="set-row__text">
             <strong>Autopilot ordering</strong>
-            <span>{state.autonomy === 'auto' ? 'yoink! places orders for you' : 'yoink! suggests, you confirm'}</span>
+            <span>{state.autonomy === 'autopilot' ? 'yoink! places orders for you' : 'yoink! suggests, you confirm'}</span>
           </div>
           <button
             type="button"
-            className={`toggle ${state.autonomy === 'auto' ? 'is-on' : ''}`}
+            className={`toggle ${state.autonomy === 'autopilot' ? 'is-on' : ''}`}
             role="switch"
-            aria-checked={state.autonomy === 'auto'}
+            aria-checked={state.autonomy === 'autopilot'}
             aria-label="Autopilot ordering"
             onClick={() =>
-              dispatch({ type: 'SET_AUTONOMY', mode: state.autonomy === 'auto' ? 'suggest' : 'auto' })
+              dispatch({ type: 'SET_AUTONOMY', mode: state.autonomy === 'autopilot' ? 'suggest' : 'autopilot' })
             }
           >
             <span className="toggle__knob" />
           </button>
-        </div>
-        <div className="set-row">
-          <div className="set-row__text">
-            <strong>Door-close capture</strong>
-            <span>Camera fires when the fridge closes</span>
-          </div>
-          <button type="button" className="toggle is-on" role="switch" aria-checked="true" aria-label="Door-close capture">
-            <span className="toggle__knob" />
-          </button>
-        </div>
-        <div style={{ marginTop: 18 }}>
-          <Button
-            variant="ghost"
-            full
-            onClick={() => {
-              dispatch({ type: 'RESET_DEMO' })
-              setSettings(false)
-              nav.reset('onboarding')
-            }}
-          >
-            <Icon name="refresh" size={17} />
-            Reset demo
-          </Button>
         </div>
       </Sheet>
     </div>
   )
 }
 
-function ItemDetail({ item, dispatch, onClose, nav }) {
-  const runOut = predictedRunOut(item)
-  const status = statusOf(item)
-  const fresh = freshnessLabel(item)
+function ItemDetail({ item, addStaple, onClose, nav }) {
+  const [consumption, setConsumption] = useState(null)
+  const [loadingLog, setLoadingLog] = useState(true)
 
-  // Reconstruct a 7-day stock trend from qty + learned pace (roughly one
-  // restock's worth ago), normalised to the tallest bar.
-  const peak = item.qty + (item.perWeek || item.qty * 0.5)
-  const bars = Array.from({ length: 7 }, (_, i) => {
-    const q = peak - (peak - item.qty) * (i / 6)
-    return Math.max(10, (q / peak) * 100)
-  })
+  useEffect(() => {
+    let cancelled = false
+    setLoadingLog(true)
+    api
+      .fetchItemLog(item.id)
+      .then((log) => {
+        if (!cancelled) setConsumption(estimateConsumption(log))
+      })
+      .catch(() => {
+        if (!cancelled) setConsumption(null)
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingLog(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [item.id])
+
+  const enriched = useMemo(() => ({ ...item, perWeek: consumption?.perWeek ?? null }), [item, consumption])
+  const runOut = predictedRunOut(enriched)
+  const status = statusOf(enriched)
+  const fresh = freshnessLabel(enriched)
 
   return (
     <>
-      <div className="spark" aria-hidden="true">
-        {bars.map((h, i) => (
-          <span
-            key={i}
-            className={i === bars.length - 1 ? `spark__now spark__now--${status}` : ''}
-            style={{ height: `${Math.min(100, h)}%` }}
-          />
-        ))}
-      </div>
-      <p className="meta" style={{ marginBottom: 10 }}>
-        Stock trend · last 7 days
-      </p>
-
       <div className="detail-stat">
         <span className="detail-stat__k">In stock</span>
         <span className="detail-stat__v">{formatQty(item)}</span>
       </div>
       <div className="detail-stat">
         <span className="detail-stat__k">Learned pace</span>
-        <span className="detail-stat__v">~{item.perWeek} {item.unit}/week</span>
+        <span className="detail-stat__v">
+          {loadingLog
+            ? 'loading…'
+            : consumption
+              ? `~${consumption.perWeek.toFixed(1)} ${item.unit}/week`
+              : 'not enough data yet'}
+        </span>
       </div>
       <div className="detail-stat">
         <span className="detail-stat__k">Predicted to run out</span>
@@ -276,7 +297,7 @@ function ItemDetail({ item, dispatch, onClose, nav }) {
         </span>
       </div>
       <div className="detail-stat">
-        <span className="detail-stat__k">Added</span>
+        <span className="detail-stat__k">First tracked</span>
         <span className="detail-stat__v">{relativeAdded(item.addedDaysAgo)}</span>
       </div>
 
@@ -285,7 +306,7 @@ function ItemDetail({ item, dispatch, onClose, nav }) {
           variant="ghost"
           full
           onClick={() => {
-            dispatch({ type: 'ADD_STAPLE', name: item.name })
+            addStaple(item.name)
             onClose()
           }}
         >
