@@ -80,8 +80,8 @@ export function addRecipeFeedback({ recipeTitle, liked, ingredientsUsed }) {
 
 // ---- recipes ------------------------------------------------------------
 
-export function fetchRecipes(count = 4) {
-  return request(`/recipes?count=${count}`)
+export function fetchRecipes(count = 4, mode = 'pantry') {
+  return request(`/recipes?count=${count}&mode=${mode}`)
 }
 
 export function generateRecipeImage({ title, blurb, ingredients }) {
@@ -101,4 +101,11 @@ export function runAgentForItem(itemName, mode, { force = false } = {}) {
 export function runAgentSweep(mode) {
   const params = new URLSearchParams({ mode })
   return request(`/agent/sweep?${params}`, { method: 'POST' })
+}
+
+export function chatWithAgent(messages) {
+  return request('/agent/chat', {
+    method: 'POST',
+    body: JSON.stringify({ messages: messages.map(({ role, content }) => ({ role, content })) }),
+  })
 }

@@ -175,6 +175,13 @@ export default function Recipe({ seedItem }) {
 
   useEffect(() => {
     if (!recipe || requestedPhotos.current.has(recipe.title)) return
+    if (recipe.photo) {
+      // Real recipes (TheMealDB) already come with a real photo — no need
+      // to spend an AI image-gen call on one.
+      requestedPhotos.current.add(recipe.title)
+      setHeroPhotos((h) => ({ ...h, [recipe.title]: { status: 'done', url: recipe.photo } }))
+      return
+    }
     requestPhoto(recipe)
   }, [recipe, requestPhoto])
 
@@ -227,7 +234,7 @@ export default function Recipe({ seedItem }) {
   const scaledIngredients = recipe
     ? recipe.ingredients.map((ing) => ({ ...ing, qty: scaleQty(ing.qty, ratio) }))
     : []
-  const scaledKcal = recipe ? Math.max(0, Math.round(recipe.kcal * ratio)) : 0
+  const scaledKcal = recipe && recipe.kcal != null ? Math.max(0, Math.round(recipe.kcal * ratio)) : null
 
   const tabs = (
     <div className="recipe2__tabs">
@@ -288,15 +295,16 @@ export default function Recipe({ seedItem }) {
         {tabs}
         <h1 className="recipe2__title">{recipe.title}</h1>
         <p className="recipe2__desc">{recipe.blurb}</p>
+        {recipe.source && <span className="recipe2__source">via {recipe.source}</span>}
 
         <div className="recipe2__stats">
           <div className="recipe2__stat">
             <span className="recipe2__stat-k">Skill Level</span>
-            <span className="recipe2__stat-v">{recipe.skill}</span>
+            <span className="recipe2__stat-v">{recipe.skill || '—'}</span>
           </div>
           <div className="recipe2__stat">
             <span className="recipe2__stat-k">Cook Time</span>
-            <span className="recipe2__stat-v">{recipe.minutes}m</span>
+            <span className="recipe2__stat-v">{recipe.minutes != null ? `${recipe.minutes}m` : '—'}</span>
           </div>
           <div className="recipe2__stat">
             <span className="recipe2__stat-k">Ingredients</span>
@@ -304,7 +312,7 @@ export default function Recipe({ seedItem }) {
           </div>
           <div className="recipe2__stat">
             <span className="recipe2__stat-k">Est. Calories</span>
-            <span className="recipe2__stat-v">{scaledKcal}</span>
+            <span className="recipe2__stat-v">{scaledKcal != null ? scaledKcal : '—'}</span>
           </div>
         </div>
 

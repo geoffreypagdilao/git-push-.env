@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import Icon from '../components/Icon'
 import { useNav } from '../lib/navigation'
+import { chatWithAgent } from '../lib/api'
 
 const STICKER_URL = (f) => `${import.meta.env.BASE_URL}stickers/${f}`
 
@@ -12,22 +13,29 @@ const PLATE = [
   { src: 'avocado.png', top: 50, left: 62, size: 98, rot: 12 },
 ]
 
-const SUGGESTIONS = ['15 min recipes', 'Easy breakfast', 'Tomato soup', 'Use what expires first']
+const SUGGESTIONS = ["What's about to expire?", 'Should I restock anything?', 'Substitute for eggs?', 'Add milk to my list']
 
 export default function AskRecipe() {
   const nav = useNav()
   const [text, setText] = useState('')
-  const [reply, setReply] = useState(null)
+  const [messages, setMessages] = useState([]) // {role: 'user' | 'assistant', content}
+  const [sending, setSending] = useState(false)
 
   const submit = (q) => {
     const prompt = (q ?? text).trim()
-    if (!prompt) return
-    setReply({
-      prompt,
-      title: 'Charred Broccoli & Egg Bowl',
-      line: 'Based on what’s in your fridge, this comes together in 25 minutes and uses the broccoli and eggs first.',
-    })
+    if (!prompt || sending) return
+    const next = [...messages, { role: 'user', content: prompt }]
+    setMessages(next)
     setText('')
+    setSending(true)
+    chatWithAgent(next)
+      .then((result) => {
+        setMessages((m) => [...m, { role: 'assistant', content: result.reply }])
+      })
+      .catch((err) => {
+        setMessages((m) => [...m, { role: 'assistant', content: `Sorry, something went wrong. (${err.message})` }])
+      })
+      .finally(() => setSending(false))
   }
 
   return (
@@ -45,25 +53,30 @@ export default function AskRecipe() {
       </div>
 
       <div className="screen__scroll ask__body">
-        {reply ? (
+        {messages.length > 0 ? (
           <div className="ask__thread">
-            <p className="ask__you">{reply.prompt}</p>
-            <div className="ask__ai">
-              <span className="ask__ai-spark">
-                <Icon name="sparkle" size={14} />
-              </span>
-              <div>
-                <p className="ask__ai-line">{reply.line}</p>
-                <button
-                  type="button"
-                  className="ask__ai-open"
-                  onClick={() => nav.push('recipe', { seedItem: 'Broccoli' })}
-                >
-                  Open {reply.title}
-                  <Icon name="chevron-right" size={15} />
-                </button>
+            {messages.map((m, i) =>
+              m.role === 'user' ? (
+                <p className="ask__you" key={i}>
+                  {m.content}
+                </p>
+              ) : (
+                <div className="ask__ai" key={i}>
+                  <span className="ask__ai-spark">
+                    <Icon name="sparkle" size={14} />
+                  </span>
+                  <p className="ask__ai-line">{m.content}</p>
+                </div>
+              ),
+            )}
+            {sending && (
+              <div className="ask__ai">
+                <span className="ask__ai-spark">
+                  <Icon name="sparkle" size={14} />
+                </span>
+                <p className="ask__ai-line">Thinking…</p>
               </div>
-            </div>
+            )}
           </div>
         ) : (
           <>
@@ -90,14 +103,14 @@ export default function AskRecipe() {
               </span>
             </div>
             <p className="ask__lead">
-              Let’s find out what’s <strong>on your plate</strong>
+              Ask about <strong>your fridge</strong>
             </p>
           </>
         )}
       </div>
 
       <div className="ask__composer">
-        {!reply && (
+        {messages.length === 0 && (
           <div className="ask__chips">
             {SUGGESTIONS.map((s) => (
               <button key={s} type="button" className="ask__chip" onClick={() => submit(s)}>
@@ -117,14 +130,15 @@ export default function AskRecipe() {
             className="ask__input"
             value={text}
             onChange={(e) => setText(e.target.value)}
-            placeholder="Describe the dish…"
+            placeholder="Ask about your fridge…"
+            disabled={sending}
           />
           <div className="ask__inputrow">
             <button type="button" className="ask__upload">
               <Icon name="upload" size={15} />
               Upload
             </button>
-            <button type="submit" className="ask__send" aria-label="Ask" disabled={!text.trim()}>
+            <button type="submit" className="ask__send" aria-label="Ask" disabled={!text.trim() || sending}>
               <Icon name="arrow-up" size={18} />
             </button>
           </div>
