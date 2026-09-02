@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import ReactMarkdown from 'react-markdown'
 import Icon from '../components/Icon'
 import { useNav } from '../lib/navigation'
 import { chatWithAgent } from '../lib/api'
@@ -45,8 +46,8 @@ export default function AskRecipe() {
         <button
           type="button"
           className="ask__icon-btn"
-          aria-label="Back to recipe"
-          onClick={() => nav.replace('recipe')}
+          aria-label="Back to home"
+          onClick={() => nav.go('fridge')}
         >
           <Icon name="arrow-left" size={20} />
         </button>
@@ -65,7 +66,9 @@ export default function AskRecipe() {
                   <span className="ask__ai-spark">
                     <Icon name="sparkle" size={14} />
                   </span>
-                  <p className="ask__ai-line">{m.content}</p>
+                  <div className="ask__ai-line">
+                    <ReactMarkdown>{m.content}</ReactMarkdown>
+                  </div>
                 </div>
               ),
             )}
@@ -134,10 +137,6 @@ export default function AskRecipe() {
             disabled={sending}
           />
           <div className="ask__inputrow">
-            <button type="button" className="ask__upload">
-              <Icon name="upload" size={15} />
-              Upload
-            </button>
             <button type="submit" className="ask__send" aria-label="Ask" disabled={!text.trim() || sending}>
               <Icon name="arrow-up" size={18} />
             </button>

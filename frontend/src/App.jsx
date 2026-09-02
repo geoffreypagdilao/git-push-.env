@@ -21,7 +21,7 @@ const SCREENS = {
   ask: AskRecipe,
 }
 
-const WITH_NAV = new Set(['fridge', 'shopping'])
+const WITH_NAV = new Set(['fridge', 'shopping', 'ask'])
 
 function Router() {
   const { current } = useNav()

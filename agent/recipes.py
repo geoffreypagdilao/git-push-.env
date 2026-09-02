@@ -12,7 +12,7 @@ import httpx
 from pydantic import BaseModel, Field
 
 from agent.langchain_agent import _get_llm
-from agent.prompts import SYSTEM_PROMPT_RECIPES, SYSTEM_PROMPT_RECIPES_HEALTHY
+from agent.prompts import SYSTEM_PROMPT_RECIPE_ESTIMATES, SYSTEM_PROMPT_RECIPES, SYSTEM_PROMPT_RECIPES_HEALTHY
 from backend.app.db.supabase_client import supabase
 
 MAX_LLM_RETRIES = 1
@@ -72,6 +72,17 @@ class RecipeList(BaseModel):
     recipes: list[Recipe]
 
 
+class RecipeStatEstimate(BaseModel):
+    title: str
+    skill: str
+    minutes: int
+    kcal: int
+
+
+class RecipeStatEstimateList(BaseModel):
+    estimates: list[RecipeStatEstimate]
+
+
 def _get_stock_context() -> list[dict]:
     """Current tracked items, soonest-to-expire first (nulls last)."""
     result = supabase.table("items").select("name, quantity, unit, expiry_date").execute()
@@ -111,8 +122,10 @@ def _mealdb_get(path: str, **params) -> dict:
 def _meal_to_recipe(meal: dict) -> dict:
     """Map TheMealDB's flat strIngredient1..20/strMeasure1..20 shape into
     our {name, qty, pantry} ingredient list. skill/minutes/kcal aren't in
-    TheMealDB's data at all — left None rather than invented, and the
-    frontend shows '—' for those instead of a fabricated number.
+    TheMealDB's data at all — left None here; fetch_healthy_recipes fills
+    them in afterward with a real AI estimate over the actual ingredients/
+    quantities/instructions, rather than either fabricating a number here
+    or leaving a permanent '—' in the UI.
     """
     ingredients = []
     for i in range(1, 21):
@@ -144,14 +157,47 @@ def _meal_to_recipe(meal: dict) -> dict:
     }
 
 
+def _estimate_recipe_stats(recipes: list[dict]) -> dict:
+    """One batched LLM call estimating skill/minutes/kcal for every recipe
+    at once (cheaper and more consistent than one call per recipe), based
+    on each recipe's real ingredients, quantities, and instructions — not
+    invented, an actual estimate over real data. Best-effort: returns {} on
+    any failure so a flaky estimate call never breaks the recipe list
+    itself, matching the rest of agent/'s graceful-failure style.
+    """
+    lines = []
+    for r in recipes:
+        lines.append(f"### {r['title']} (serves {r['serves']})")
+        lines.append("Ingredients:")
+        for ing in r["ingredients"]:
+            lines.append(f"- {ing['qty']} {ing['name']}")
+        lines.append("Instructions:")
+        lines.append(" ".join(r["steps"]))
+        lines.append("")
+    user_message = "\n".join(lines)
+
+    try:
+        llm = _get_llm(max_tokens=2048, model=MODEL_BY_MODE["pantry"]).with_structured_output(RecipeStatEstimateList)
+        result: RecipeStatEstimateList = llm.invoke(
+            [
+                {"role": "system", "content": SYSTEM_PROMPT_RECIPE_ESTIMATES},
+                {"role": "user", "content": user_message},
+            ]
+        )
+        return {e.title: e for e in result.estimates}
+    except Exception:  # noqa: BLE001 — estimates are a nice-to-have, never worth failing the whole request over
+        return {}
+
+
 def fetch_healthy_recipes(limit: int = HEALTHY_RECIPE_LIMIT) -> dict:
     """Real recipes from TheMealDB's free ingredient-search endpoint — one
     filter.php call per tracked item (soonest-to-expire first), results
     round-robined across ingredients so no single high-hit ingredient
-    crowds out the others. No LLM call: this is a real recipe database
-    lookup, not a generation task, per the free-tier research that showed
-    the paid multi-ingredient filter isn't available and doesn't overlap
-    well anyway.
+    crowds out the others. The recipes themselves are real database lookups,
+    not an LLM generation task — but skill/minutes/kcal aren't in TheMealDB
+    at all, so those three get filled in by one batched AI estimate call
+    afterward (see _estimate_recipe_stats), over the real ingredients and
+    instructions just fetched.
     """
     stock = _get_stock_context()
     if not stock:
@@ -189,6 +235,15 @@ def fetch_healthy_recipes(limit: int = HEALTHY_RECIPE_LIMIT) -> dict:
 
     if not recipes:
         return {"recipes": [], "error": True, "message": "Couldn't find any recipes for your current stock right now."}
+
+    estimates = _estimate_recipe_stats(recipes)
+    for r in recipes:
+        est = estimates.get(r["title"])
+        if est:
+            r["skill"] = est.skill
+            r["minutes"] = est.minutes
+            r["kcal"] = est.kcal
+
     return {"recipes": recipes, "error": False}
 
 
@@ -247,7 +302,10 @@ def generate_recipes(count: int = 3, mode: str = "pantry") -> dict:
                     {"role": "user", "content": user_message},
                 ]
             )
-            return {"recipes": [r.model_dump() for r in result.recipes], "error": False}
+            # The prompt's "suggest {count} recipes" is just an instruction,
+            # not a guarantee — models occasionally return more (or fewer).
+            # Truncating enforces count as a hard max regardless.
+            return {"recipes": [r.model_dump() for r in result.recipes[:count]], "error": False}
         except Exception as exc:  # noqa: BLE001 — mirrors langchain_agent's retry-then-graceful-fail pattern
             last_exc = exc
             if attempt < MAX_LLM_RETRIES:

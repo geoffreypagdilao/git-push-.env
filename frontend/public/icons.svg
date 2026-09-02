@@ -68,6 +68,9 @@
     <path d="M12 3.5c.7 3.9 1.9 5.1 5.8 5.8-3.9.7-5.1 1.9-5.8 5.8-.7-3.9-1.9-5.1-5.8-5.8 3.9-.7 5.1-1.9 5.8-5.8Z"/>
     <path d="M18.5 14.5c.35 1.85.9 2.4 2.75 2.75-1.85.35-2.4.9-2.75 2.75-.35-1.85-.9-2.4-2.75-2.75 1.85-.35 2.4-.9 2.75-2.75Z"/>
   </symbol>
+  <symbol id="i-message" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H9l-4 3.5V17H6a2 2 0 0 1-2-2z"/>
+  </symbol>
   <symbol id="i-gear" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
     <circle cx="12" cy="12" r="3.1"/>
     <path d="M12 2.6l1.5 2.2 2.6-.6.5 2.6 2.6.8-.9 2.5 1.8 2-1.8 2 .9 2.5-2.6.8-.5 2.6-2.6-.6L12 21.4l-1.5-2.2-2.6.6-.5-2.6-2.6-.8.9-2.5-1.8-2 1.8-2-.9-2.5 2.6-.8.5-2.6 2.6.6z"/>

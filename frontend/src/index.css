@@ -75,6 +75,15 @@ body,
   height: 100%;
 }
 
+html {
+  /* Reserve scrollbar space on every screen, even ones short enough not to
+     need it — otherwise the fixed, centered bottom-nav pill visibly shifts
+     a few px sideways depending on whether the current screen's content is
+     tall enough to trigger a scrollbar (e.g. a long chat vs. a short one). */
+  scrollbar-gutter: stable;
+  overflow-y: scroll;
+}
+
 body {
   margin: 0;
 }

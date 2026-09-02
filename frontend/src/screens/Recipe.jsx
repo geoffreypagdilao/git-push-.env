@@ -3,31 +3,66 @@ import Icon from '../components/Icon'
 import Button from '../components/Button'
 import TopBar from '../components/TopBar'
 import Segmented from '../components/Segmented'
+import BottomNav from '../components/BottomNav'
 import AITextLoading from '../components/AITextLoading'
 import { useNav } from '../lib/navigation'
 import { useStore } from '../lib/store'
 import { addRecipeFeedback, fetchRecipes, generateRecipeImage } from '../lib/api'
 import { stickerFor } from '../lib/mockData'
 
-const RECIPE_COUNT = 3
+const RECIPE_COUNT = 5
 
+// 'cooked' is intentionally not a tab here — 4 tabs wrapped to two lines
+// on narrow screens. It's reached directly via its own bottom-nav icon
+// instead (see BottomNav.jsx), landing on this same screen with
+// initialMode='cooked'. Still fully supported below — just not offered as
+// a switch target from the segmented control.
 const MODES = [
   { value: 'pantry', label: 'What you have' },
   { value: 'healthy', label: 'Healthy ideas' },
+  { value: 'saved', label: 'Saved' },
 ]
 
 // Best-effort scale of a quantity string's leading number by `ratio` (e.g.
 // "2 tbsp" at 1.5x -> "3 tbsp"). Leaves anything without a clear leading
 // number (e.g. "to taste", "a pinch") untouched — good enough for a display
 // estimate, not meant to be exact.
+// Parses the leading quantity off a string like "1 1/2 cups" or "2/3 cup"
+// or "4 cups" — mixed number, then plain fraction, then decimal/integer, in
+// that priority order since a mixed number's whole part alone would
+// otherwise match the decimal/integer pattern first.
+function parseLeadingNumber(str) {
+  let m = str.match(/^(\d+)\s+(\d+)\/(\d+)/)
+  if (m) return { value: parseInt(m[1], 10) + parseInt(m[2], 10) / parseInt(m[3], 10), matched: m[0] }
+  m = str.match(/^(\d+)\/(\d+)/)
+  if (m) return { value: parseInt(m[1], 10) / parseInt(m[2], 10), matched: m[0] }
+  m = str.match(/^(\d+(?:\.\d+)?)/)
+  if (m) return { value: parseFloat(m[1]), matched: m[0] }
+  return null
+}
+
+function formatNumber(n) {
+  const rounded = Math.round(n * 100) / 100
+  return Number.isInteger(rounded) ? String(rounded) : String(rounded).replace(/0+$/, '').replace(/\.$/, '')
+}
+
 function scaleQty(qty, ratio) {
   if (!qty || ratio === 1) return qty
-  const m = qty.match(/^(\d+)\/(\d+)|^(\d+(?:\.\d+)?)/)
-  if (!m) return qty
-  const value = m[1] ? parseInt(m[1], 10) / parseInt(m[2], 10) : parseFloat(m[3])
-  const scaled = Math.round(value * ratio * 100) / 100
-  const formatted = Number.isInteger(scaled) ? String(scaled) : String(scaled).replace(/0+$/, '').replace(/\.$/, '')
-  return formatted + qty.slice(m[0].length)
+  const trimmed = qty.trimStart()
+  const leadingWs = qty.slice(0, qty.length - trimmed.length)
+
+  // Range like "2-3 cloves" — scale both sides rather than just the first
+  // number (which previously left the range backwards or nonsensical).
+  const rangeMatch = trimmed.match(/^(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)/)
+  if (rangeMatch) {
+    const lo = formatNumber(parseFloat(rangeMatch[1]) * ratio)
+    const hi = formatNumber(parseFloat(rangeMatch[2]) * ratio)
+    return leadingWs + lo + '-' + hi + trimmed.slice(rangeMatch[0].length)
+  }
+
+  const parsed = parseLeadingNumber(trimmed)
+  if (!parsed) return qty
+  return leadingWs + formatNumber(parsed.value * ratio) + trimmed.slice(parsed.matched.length)
 }
 
 // Every recipe should end up with a real AI photo — while it's generating,
@@ -85,11 +120,11 @@ function IngredientCard({ ing, inFridge, added, onAdd }) {
   )
 }
 
-export default function Recipe({ seedItem }) {
+export default function Recipe({ seedItem, initialMode }) {
   const nav = useNav()
-  const { state, addStaple } = useStore()
+  const { state, addStaple, toggleSaveRecipe, logCooked, setCookedMemoryPhoto } = useStore()
 
-  const [mode, setMode] = useState('pantry')
+  const [mode, setMode] = useState(initialMode || 'pantry')
   const [byMode, setByMode] = useState({}) // mode -> { list, error }
   const [loadingMode, setLoadingMode] = useState('pantry')
   const [idx, setIdx] = useState(0)
@@ -124,7 +159,20 @@ export default function Recipe({ seedItem }) {
       .finally(() => setLoadingMode((cur) => (cur === m ? null : cur)))
   }, [])
 
+  const initialLoadStarted = useRef(false)
   useEffect(() => {
+    // StrictMode runs mount effects twice in dev to catch exactly this kind
+    // of bug — without this guard, loadMode fires twice, each a separate
+    // non-deterministic LLM call, so the "first" recipe's title differs
+    // between them and each ends up generating its own AI photo.
+    if (initialLoadStarted.current) return
+    initialLoadStarted.current = true
+    if (mode === 'cooked') {
+      // No fetch — it's a local list, and there's no LLM/API call to make.
+      setIdx(0)
+      if (state.cookedRecipes.length > 0) setServes(state.cookedRecipes[0].serves)
+      return
+    }
     loadMode('pantry', seedItem)
     // only on mount — switching tabs/recipes afterward goes through switchTab/switchRecipe
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -136,6 +184,12 @@ export default function Recipe({ seedItem }) {
     setAdded([])
     setCooking(false)
     setDoneSteps(new Set())
+    if (m === 'saved') {
+      // No API call — the list is just what's in localStorage already.
+      setIdx(0)
+      if (state.savedRecipes.length > 0) setServes(state.savedRecipes[0].serves)
+      return
+    }
     const existing = byMode[m]
     if (existing) {
       setIdx(0)
@@ -146,9 +200,10 @@ export default function Recipe({ seedItem }) {
   }
 
   const current = byMode[mode]
-  const recipeList = current?.list || []
+  const recipeList =
+    mode === 'saved' ? state.savedRecipes : mode === 'cooked' ? state.cookedRecipes : current?.list || []
   const recipe = recipeList[idx] || null
-  const isLoading = loadingMode === mode && !current
+  const isLoading = mode !== 'saved' && mode !== 'cooked' && loadingMode === mode && !current
 
   // One AI photo per recipe — every recipe should end up with a real photo,
   // not settle for the sticker collage, so a failed attempt is retryable
@@ -198,15 +253,17 @@ export default function Recipe({ seedItem }) {
     [state.inventory],
   )
 
-  const switchRecipe = () => {
+  const stepRecipe = (delta) => {
     if (recipeList.length < 2) return
-    const next = (idx + 1) % recipeList.length
+    const next = (idx + delta + recipeList.length) % recipeList.length
     setIdx(next)
     setServes(recipeList[next].serves)
     setAdded([])
     setCooking(false)
     setDoneSteps(new Set())
   }
+
+  const switchRecipe = () => stepRecipe(1)
 
   const toggleStep = (i) => {
     setDoneSteps((prev) => {
@@ -215,6 +272,17 @@ export default function Recipe({ seedItem }) {
       else next.add(i)
       return next
     })
+  }
+
+  // Read the picked photo as a data URL and store it inline with the
+  // cooked-recipe entry — everything here is localStorage-only (see
+  // lib/store.jsx), no upload endpoint, so there's nowhere else to put it.
+  const handleMemoryUpload = (id, e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => setCookedMemoryPhoto(id, reader.result)
+    reader.readAsDataURL(file)
   }
 
   const addToList = (name) => {
@@ -235,6 +303,7 @@ export default function Recipe({ seedItem }) {
     ? recipe.ingredients.map((ing) => ({ ...ing, qty: scaleQty(ing.qty, ratio) }))
     : []
   const scaledKcal = recipe && recipe.kcal != null ? Math.max(0, Math.round(recipe.kcal * ratio)) : null
+  const isSaved = recipe ? state.savedRecipes.some((r) => r.title === recipe.title) : false
 
   const tabs = (
     <div className="recipe2__tabs">
@@ -259,13 +328,22 @@ export default function Recipe({ seedItem }) {
       <div className="screen screen--narrow">
         <TopBar title="Recipe ideas" onBack={() => nav.go('fridge')} />
         <div className="screen__scroll">
-          {tabs}
-          <p className="muted-note">{current?.error || 'No recipes to show yet.'}</p>
-          <Button variant="ghost" onClick={() => loadMode(mode, seedItem)} style={{ marginTop: 12 }}>
-            <Icon name="refresh" size={15} />
-            Try again
-          </Button>
+          {mode !== 'cooked' && tabs}
+          <p className="muted-note">
+            {mode === 'saved'
+              ? "You haven't saved any recipes yet — tap the bookmark on a recipe to save it here."
+              : mode === 'cooked'
+                ? "You haven't cooked anything yet — hit Cook on a recipe to log it here."
+                : current?.error || 'No recipes to show yet.'}
+          </p>
+          {mode !== 'saved' && mode !== 'cooked' && (
+            <Button variant="ghost" onClick={() => loadMode(mode, seedItem)} style={{ marginTop: 12 }}>
+              <Icon name="refresh" size={15} />
+              Try again
+            </Button>
+          )}
         </div>
+        {mode === 'cooked' && <BottomNav />}
       </div>
     )
   }
@@ -284,15 +362,39 @@ export default function Recipe({ seedItem }) {
         </button>
         <button
           type="button"
-          className="recipe2__float recipe2__float--right"
-          aria-label="Save recipe"
+          className={`recipe2__float recipe2__float--right ${isSaved ? 'is-saved' : ''}`}
+          aria-label={isSaved ? 'Unsave recipe' : 'Save recipe'}
+          aria-pressed={isSaved}
+          onClick={() =>
+            toggleSaveRecipe(
+              !recipe.photo && photoState?.status === 'done' ? { ...recipe, photo: photoState.url } : recipe,
+            )
+          }
         >
           <Icon name="bookmark" size={18} />
         </button>
       </div>
 
       <div className="screen__scroll recipe2__body">
-        {tabs}
+        {mode !== 'cooked' && tabs}
+        {recipeList.length > 1 && (
+          <div className="recipe2__pager">
+            <button
+              type="button"
+              className="recipe2__pager-btn"
+              aria-label="Previous recipe"
+              onClick={() => stepRecipe(-1)}
+            >
+              <Icon name="arrow-left" size={16} />
+            </button>
+            <span className="recipe2__pager-count">
+              {idx + 1} / {recipeList.length}
+            </span>
+            <button type="button" className="recipe2__pager-btn" aria-label="Next recipe" onClick={() => stepRecipe(1)}>
+              <Icon name="arrow-right" size={16} />
+            </button>
+          </div>
+        )}
         <h1 className="recipe2__title">{recipe.title}</h1>
         <p className="recipe2__desc">{recipe.blurb}</p>
         {recipe.source && <span className="recipe2__source">via {recipe.source}</span>}
@@ -334,74 +436,107 @@ export default function Recipe({ seedItem }) {
           ))}
         </div>
 
-        <div className="recipe2__ing-head recipe2__steps-head">
-          <h2 className="recipe2__h2">Cooking Steps</h2>
-          <span className="recipe2__hint">Tick when you're done</span>
-        </div>
-        <ol className="recipe2__steps">
-          {recipe.steps.map((text, i) => {
-            const done = doneSteps.has(i)
-            return (
-              <li className={`cstep ${done ? 'is-done' : ''}`} key={i}>
-                <button
-                  type="button"
-                  className="cstep__check"
-                  aria-label={done ? `Mark step ${i + 1} not done` : `Mark step ${i + 1} done`}
-                  aria-pressed={done}
-                  onClick={() => toggleStep(i)}
-                >
-                  {done && <Icon name="check" size={13} />}
-                </button>
-                <span className="cstep__n">{String(i + 1).padStart(2, '0')}</span>
-                <span className="cstep__text">{text}</span>
-              </li>
-            )
-          })}
-        </ol>
+        {mode !== 'cooked' && (
+          <>
+            <div className="recipe2__ing-head recipe2__steps-head">
+              <h2 className="recipe2__h2">Cooking Steps</h2>
+              <span className="recipe2__hint">Tick when you're done</span>
+            </div>
+            <ol className="recipe2__steps">
+              {recipe.steps.map((text, i) => {
+                const done = doneSteps.has(i)
+                return (
+                  <li className={`cstep ${done ? 'is-done' : ''}`} key={i}>
+                    <button
+                      type="button"
+                      className="cstep__check"
+                      aria-label={done ? `Mark step ${i + 1} not done` : `Mark step ${i + 1} done`}
+                      aria-pressed={done}
+                      onClick={() => toggleStep(i)}
+                    >
+                      {done && <Icon name="check" size={13} />}
+                    </button>
+                    <span className="cstep__n">{String(i + 1).padStart(2, '0')}</span>
+                    <span className="cstep__text">{text}</span>
+                  </li>
+                )
+              })}
+            </ol>
 
-        <button type="button" className="recipe2__another" onClick={switchRecipe} disabled={recipeList.length < 2}>
-          <Icon name="refresh" size={15} />
-          Show another idea
-        </button>
+            <button type="button" className="recipe2__another" onClick={switchRecipe} disabled={recipeList.length < 2}>
+              <Icon name="refresh" size={15} />
+              Show another idea
+            </button>
+          </>
+        )}
+
+        {mode === 'cooked' && (
+          <div className="recipe2__memory">
+            <div className="recipe2__ing-head">
+              <h2 className="recipe2__h2">Memory</h2>
+              <span className="recipe2__hint">{new Date(recipe.cookedAt).toLocaleDateString()}</span>
+            </div>
+            {recipe.memoryPhoto ? (
+              <label className="recipe2__memory-photo">
+                <img src={recipe.memoryPhoto} alt="Your cooked dish" />
+                <input type="file" accept="image/*" onChange={(e) => handleMemoryUpload(recipe.id, e)} hidden />
+                <span className="recipe2__memory-replace">
+                  <Icon name="upload" size={14} />
+                  Replace photo
+                </span>
+              </label>
+            ) : (
+              <label className="recipe2__memory-upload">
+                <Icon name="upload" size={20} />
+                Upload a photo of what you made
+                <input type="file" accept="image/*" onChange={(e) => handleMemoryUpload(recipe.id, e)} hidden />
+              </label>
+            )}
+          </div>
+        )}
       </div>
 
-      <div className="recipe2__bar">
-        <div className="recipe2__serves">
+      {mode !== 'cooked' && (
+        <div className="recipe2__bar">
+          <div className="recipe2__serves">
+            <button
+              type="button"
+              aria-label="Fewer servings"
+              onClick={() => setServes((s) => Math.max(1, s - 1))}
+            >
+              <Icon name="minus" size={15} />
+            </button>
+            <span>Cooking for {serves}</span>
+            <button type="button" aria-label="More servings" onClick={() => setServes((s) => s + 1)}>
+              <Icon name="plus" size={15} />
+            </button>
+          </div>
           <button
             type="button"
-            aria-label="Fewer servings"
-            onClick={() => setServes((s) => Math.max(1, s - 1))}
+            className="recipe2__ask"
+            onClick={() => nav.push('ask')}
           >
-            <Icon name="minus" size={15} />
+            <Icon name="sparkle" size={15} />
+            Ask
           </button>
-          <span>Cooking for {serves}</span>
-          <button type="button" aria-label="More servings" onClick={() => setServes((s) => s + 1)}>
-            <Icon name="plus" size={15} />
+          <button
+            type="button"
+            className="recipe2__cook"
+            onClick={() => {
+              setCooking(true)
+              logCooked(recipe)
+              addRecipeFeedback({
+                recipeTitle: recipe.title,
+                liked: true,
+                ingredientsUsed: recipe.ingredients.map((i) => i.name),
+              }).catch((err) => console.error('Failed to record recipe feedback:', err))
+            }}
+          >
+            {cooking ? 'Cooking' : 'Cook'}
           </button>
         </div>
-        <button
-          type="button"
-          className="recipe2__ask"
-          onClick={() => nav.push('ask')}
-        >
-          <Icon name="sparkle" size={15} />
-          Ask
-        </button>
-        <button
-          type="button"
-          className="recipe2__cook"
-          onClick={() => {
-            setCooking(true)
-            addRecipeFeedback({
-              recipeTitle: recipe.title,
-              liked: true,
-              ingredientsUsed: recipe.ingredients.map((i) => i.name),
-            }).catch((err) => console.error('Failed to record recipe feedback:', err))
-          }}
-        >
-          {cooking ? 'Cooking' : 'Cook'}
-        </button>
-      </div>
+      )}
+      {mode === 'cooked' && <BottomNav />}
     </div>
   )
 }

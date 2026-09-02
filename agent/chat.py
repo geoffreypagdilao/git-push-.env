@@ -50,6 +50,9 @@ You can:
 You never place orders or call any purchasing tool — that only happens
 through the dedicated autopilot sweep, not from chat. Keep replies short
 and conversational, not a wall of text.
+
+Never use an em dash (—) anywhere in your reply. Use a period, comma, or
+parentheses instead.
 """
 
 
@@ -105,5 +108,11 @@ def chat(messages: list[dict]) -> dict:
     tool_activity = _extract_tool_activity(result_messages)
     final_ai_messages = [m for m in result_messages if isinstance(m, AIMessage) and m.content]
     reply = final_ai_messages[-1].content if final_ai_messages else "I'm not sure how to answer that."
+
+    # The prompt asks the model to never use an em dash, but that's not
+    # reliably followed (verified: still showed up in testing) — enforced
+    # here in code instead, same "don't just prompt it, guarantee it"
+    # pattern as the rest of agent/ (see e.g. the order-cooldown guardrail).
+    reply = reply.replace("—", ", ")
 
     return {"reply": reply, "tool_calls": tool_activity, "error": False}

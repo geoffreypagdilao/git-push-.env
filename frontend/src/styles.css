@@ -1315,6 +1315,10 @@
 .recipe2__float:active {
   transform: scale(0.92);
 }
+.recipe2__float.is-saved {
+  background: var(--accent);
+  color: var(--on-accent);
+}
 
 .recipe2__body {
   padding-top: 18px;
@@ -1322,6 +1326,33 @@
 }
 .recipe2__tabs {
   margin-bottom: 16px;
+}
+.recipe2__pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+.recipe2__pager-btn {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--r-pill);
+  background: var(--fill);
+  color: var(--ink);
+  transition: transform var(--dur) var(--ease);
+}
+.recipe2__pager-btn:active {
+  transform: scale(0.9);
+}
+.recipe2__pager-count {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+  min-width: 3em;
+  text-align: center;
 }
 .recipe2__title {
   font-family: var(--font-word);
@@ -1544,6 +1575,54 @@
   color: var(--label);
 }
 
+.recipe2__memory {
+  margin-top: 24px;
+  padding-bottom: 24px;
+}
+.recipe2__memory-upload {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 32px 16px;
+  border: 1.5px dashed var(--line);
+  border-radius: var(--r-lg);
+  background: var(--fill);
+  color: var(--ink-soft);
+  font-weight: 600;
+  font-size: 0.85rem;
+  text-align: center;
+  cursor: pointer;
+}
+.recipe2__memory-photo {
+  position: relative;
+  display: block;
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  cursor: pointer;
+}
+.recipe2__memory-photo img {
+  display: block;
+  width: 100%;
+  max-height: 320px;
+  object-fit: cover;
+}
+.recipe2__memory-replace {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-radius: var(--r-pill);
+  background: color-mix(in srgb, var(--ink) 70%, transparent);
+  color: var(--paper);
+  font-weight: 600;
+  font-size: 0.78rem;
+}
+
 .recipe2__bar {
   position: fixed;
   left: 50%;
@@ -1728,6 +1807,27 @@
   line-height: 1.5;
   color: var(--ink-soft);
 }
+.ask__ai-line p {
+  margin: 0 0 8px;
+}
+.ask__ai-line p:last-child {
+  margin-bottom: 0;
+}
+.ask__ai-line strong {
+  color: var(--ink);
+  font-weight: 700;
+}
+.ask__ai-line ul,
+.ask__ai-line ol {
+  margin: 4px 0 8px;
+  padding-left: 1.2em;
+}
+.ask__ai-line li {
+  margin-bottom: 4px;
+}
+.ask__ai-line li:last-child {
+  margin-bottom: 0;
+}
 .ask__ai-open {
   display: inline-flex;
   align-items: center;
@@ -1749,7 +1849,10 @@
   bottom: 0;
   width: 100%;
   max-width: var(--content);
-  padding: 10px var(--gutter) calc(12px + env(safe-area-inset-bottom));
+  /* Extra bottom padding clears space for BottomNav's pill (~60px tall,
+     floating at bottom: 18px), which now also renders on this screen —
+     without this, the pill would sit directly over the send button. */
+  padding: 10px var(--gutter) calc(84px + env(safe-area-inset-bottom));
   background: color-mix(in srgb, var(--paper) 92%, transparent);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
@@ -1795,19 +1898,8 @@
 .ask__inputrow {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   margin-top: 10px;
-}
-.ask__upload {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 7px 12px;
-  border-radius: var(--r-pill);
-  background: var(--fill);
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: var(--label);
 }
 .ask__send {
   display: grid;

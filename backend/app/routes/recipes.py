@@ -13,7 +13,7 @@ class RecipeImageRequest(BaseModel):
 
 
 @router.get("")
-def get_recipes(count: int = 3, mode: str = "pantry"):
+def get_recipes(count: int = 5, mode: str = "pantry"):
     if mode not in ("pantry", "healthy"):
         raise HTTPException(status_code=400, detail="mode must be 'pantry' or 'healthy'")
     if mode == "healthy":

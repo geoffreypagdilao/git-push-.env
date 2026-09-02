@@ -9,6 +9,14 @@ import { adaptItem } from './inventory'
 // since the DB has no columns for them yet (see forxp.md §10.2).
 
 const SETTINGS_KEY = 'yoink.settings'
+// Recipes are generated fresh each time (LLM or MealDB), not stored server
+// side with a stable id — saving is purely a client-side bookmark for now,
+// same "no DB column yet" situation as the settings above.
+const SAVED_RECIPES_KEY = 'yoink.savedRecipes'
+// A memory log of recipes actually cooked (separate from "saved" — this is
+// "I made this", not "I might make this"). Client-side only, same reason
+// as above; the memory photo gets stored inline as a data URL alongside it.
+const COOKED_RECIPES_KEY = 'yoink.cookedRecipes'
 
 const StoreContext = createContext(null)
 
@@ -22,6 +30,26 @@ function loadSettings() {
   }
 }
 
+function loadSavedRecipes() {
+  try {
+    const raw = localStorage.getItem(SAVED_RECIPES_KEY)
+    const parsed = raw ? JSON.parse(raw) : []
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
+function loadCookedRecipes() {
+  try {
+    const raw = localStorage.getItem(COOKED_RECIPES_KEY)
+    const parsed = raw ? JSON.parse(raw) : []
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
 function initState() {
   return {
     ...loadSettings(),
@@ -30,6 +58,8 @@ function initState() {
     lastSent: null,
     inventoryLoaded: false,
     shoppingLoaded: false,
+    savedRecipes: loadSavedRecipes(),
+    cookedRecipes: loadCookedRecipes(),
   }
 }
 
@@ -75,6 +105,29 @@ function reducer(state, action) {
     case 'SET_LAST_SENT':
       return { ...state, lastSent: action.lastSent }
 
+    case 'SAVE_RECIPE': {
+      if (state.savedRecipes.some((r) => r.title === action.recipe.title)) return state
+      return { ...state, savedRecipes: [{ ...action.recipe, savedAt: Date.now() }, ...state.savedRecipes] }
+    }
+
+    case 'UNSAVE_RECIPE':
+      return { ...state, savedRecipes: state.savedRecipes.filter((r) => r.title !== action.title) }
+
+    case 'LOG_COOKED':
+      // Not deduped by title like SAVE_RECIPE — this is a memory log of
+      // each time you actually cooked something, not a single bookmark, so
+      // cooking the same recipe twice makes two separate entries.
+      return {
+        ...state,
+        cookedRecipes: [{ ...action.recipe, id: action.id, cookedAt: Date.now(), memoryPhoto: null }, ...state.cookedRecipes],
+      }
+
+    case 'SET_COOKED_MEMORY_PHOTO':
+      return {
+        ...state,
+        cookedRecipes: state.cookedRecipes.map((r) => (r.id === action.id ? { ...r, memoryPhoto: action.dataUrl } : r)),
+      }
+
     default:
       return state
   }
@@ -87,6 +140,14 @@ export function StoreProvider({ children }) {
     const { onboarded, autonomy, cart } = state
     localStorage.setItem(SETTINGS_KEY, JSON.stringify({ onboarded, autonomy, cart }))
   }, [state.onboarded, state.autonomy, state.cart])
+
+  useEffect(() => {
+    localStorage.setItem(SAVED_RECIPES_KEY, JSON.stringify(state.savedRecipes))
+  }, [state.savedRecipes])
+
+  useEffect(() => {
+    localStorage.setItem(COOKED_RECIPES_KEY, JSON.stringify(state.cookedRecipes))
+  }, [state.cookedRecipes])
 
   const refreshInventory = useCallback(async () => {
     const items = await api.fetchInventory()
@@ -158,8 +219,24 @@ export function StoreProvider({ children }) {
         await Promise.all([refreshInventory(), refreshShopping()])
         return result
       },
+
+      toggleSaveRecipe: (recipe) => {
+        const isSaved = state.savedRecipes.some((r) => r.title === recipe.title)
+        if (isSaved) dispatch({ type: 'UNSAVE_RECIPE', title: recipe.title })
+        else dispatch({ type: 'SAVE_RECIPE', recipe })
+      },
+
+      logCooked: (recipe) => {
+        const id = crypto.randomUUID()
+        dispatch({ type: 'LOG_COOKED', recipe, id })
+        return id
+      },
+
+      setCookedMemoryPhoto: (id, dataUrl) => {
+        dispatch({ type: 'SET_COOKED_MEMORY_PHOTO', id, dataUrl })
+      },
     }),
-    [state.shopping, state.cart, refreshInventory, refreshShopping],
+    [state.shopping, state.cart, state.savedRecipes, state.cookedRecipes, refreshInventory, refreshShopping],
   )
 
   const value = useMemo(
