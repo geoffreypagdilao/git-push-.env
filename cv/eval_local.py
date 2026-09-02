@@ -145,8 +145,19 @@ def main():
         except RuntimeError as exc:
             print(f"    inventory count unavailable: {exc}")
             counts = {}
-        if counts:
-            print("    inventory:", ", ".join(f"{k} x{v}" for k, v in counts.items()))
+        # Structured reading: keeps observed counts apart from estimates.
+        # Not printing the flat dict as well - it is derived from this, and
+        # showing both invited the question of which number to believe.
+        try:
+            for r in detector.read(frame):
+                extra = ""
+                if r.unit != "discrete":
+                    extra = f" ({r.count_visible} visible"
+                    extra += ", floor)" if r.is_floor() else ")"
+                print(f"      {r.sku_id:<14} x{r.best_count():<3} {r.unit:<10}"
+                      f"{r.occlusion:<11}{extra}")
+        except (RuntimeError, AttributeError):
+            pass
 
         totals.update(counts or Counter(d.label for d in detections))
 

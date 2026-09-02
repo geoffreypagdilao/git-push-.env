@@ -7,7 +7,7 @@ caller changing.
 
 import base64
 from dataclasses import dataclass
-from typing import List, Protocol, Tuple
+from typing import List, Optional, Protocol, Tuple
 
 import cv2
 
@@ -16,9 +16,63 @@ MAX_EDGE_PX = 1024
 
 @dataclass(frozen=True)
 class Detection:
+    """One box the detector proposed. Geometry only - the name is a guess."""
+
     label: str  # canonical name, see cv/labels.py
     confidence: float
     bbox: Tuple[float, float, float, float]  # xyxy, pixels
+
+
+# How much of the item the camera can actually see. Kept explicit because an
+# estimate must never masquerade as an observation.
+OCCLUSION_NONE = "none"
+OCCLUSION_PARTIAL = "partial"
+OCCLUSION_FULL = "full"
+OCCLUSION_TRUNCATED = "truncated"  # cut off by the frame edge
+
+
+@dataclass(frozen=True)
+class Reading:
+    """What the pipeline believes about one kind of produce in one frame.
+
+    Deliberately not a single integer. The system holds three different kinds
+    of knowledge and collapsing them at this layer destroys the provenance
+    downstream logic needs:
+
+    - ``count_visible``   instances actually seen. Defensible and auditable.
+    - ``count_estimated`` a (low, high) range, only when occlusion hides some.
+    - ``container``       e.g. {"type": "punnet", "count": 1} - a punnet of
+                          strawberries is 1 punnet *and* ~28 strawberries.
+                          Those are different fields, not rival answers.
+
+    A strawberry punnet reads as container={'type':'punnet','count':1},
+    count_visible=28, count_estimated=(40,60), occlusion='partial' - which is
+    the honest answer. Collapse to one number at the presentation layer if the
+    UI needs it, never here.
+    """
+
+    sku_id: str
+    unit: str  # discrete | bundle | container, from cv/labels.py
+    count_visible: int
+    container: Optional[dict] = None
+    count_estimated: Optional[Tuple[int, int]] = None
+    occlusion: str = OCCLUSION_NONE
+    confidence: float = 1.0
+    evidence_box: Optional[Tuple[float, float, float, float]] = None
+
+    def best_count(self):
+        """One number, for callers that must have one.
+
+        Bundles and containers count as one unit - a coriander bunch is 1, not
+        200 leaves - which is the whole point of the unit taxonomy.
+        """
+        if self.unit in ("bundle", "container"):
+            return (self.container or {}).get("count", 1)
+        return self.count_visible
+
+    def is_floor(self):
+        """True when the count is a lower bound rather than a total."""
+        return self.occlusion in (OCCLUSION_PARTIAL, OCCLUSION_FULL)
 
 
 class DetectorBackend(Protocol):
@@ -66,6 +120,20 @@ def encode_jpeg(frame, max_edge=MAX_EDGE_PX):
     if not ok:
         raise RuntimeError("Failed to JPEG-encode frame for the vision request")
     return base64.b64encode(buffer.tobytes()).decode("ascii")
+
+
+def draw_focus_box(frame, bbox, thickness=6):
+    """Copy of the frame with one box outlined, for context prompting.
+
+    A tight crop of a red blob is genuinely ambiguous between apple, tomato,
+    nectarine and red pepper - a person cannot do it either. What separates
+    them is scale relative to the shelf and neighbours, which is precisely
+    what cropping destroys. Sending this alongside the crop restores it.
+    """
+    out = frame.copy()
+    x1, y1, x2, y2 = (int(v) for v in bbox)
+    cv2.rectangle(out, (x1, y1), (x2, y2), (0, 0, 255), thickness)
+    return out
 
 
 def containment(a, b):

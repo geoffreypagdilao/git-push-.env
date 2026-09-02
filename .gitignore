@@ -21,6 +21,11 @@ cv/datasets/
 cv/eval_output/
 runs/
 
+# Local accuracy test set: photos + answer key, rebuildable with
+# `python -m cv.fetch_eval_set`. The script is tracked; the data is not -
+# it is hundreds of MB and not ours to redistribute.
+cv/eval_set/
+
 # Node (root-level, e.g. Supabase CLI devDependency)
 node_modules/
 

@@ -43,25 +43,41 @@ VALID_CATEGORIES = frozenset(
 )
 
 
+# --- Counting units -------------------------------------------------
+# "How many things are here" has no answer until you fix what a thing is.
+# Every class must be exactly one of these, and the counting logic reads the
+# unit off the class rather than guessing per prompt.
+DISCRETE = "discrete"    # 1 object = 1 count.       apple, cucumber, pepper
+BUNDLE = "bundle"        # 1 bunch/bag = 1 count.    coriander, spinach
+CONTAINER = "container"  # 1 container = 1 count, contents estimated apart.
+
+VALID_UNITS = frozenset({DISCRETE, BUNDLE, CONTAINER})
+
+
 @dataclass(frozen=True)
 class ProduceClass:
     canonical: str
     prompts: Tuple[str, ...]
     category: str
+    unit: str = DISCRETE
 
 
-def _c(canonical, category, *extra_prompts):
+def _c(canonical, category, *extra_prompts, unit=DISCRETE):
     """A class prompted by its bare noun plus any variants worth adding."""
-    return ProduceClass(canonical, (canonical,) + extra_prompts, category)
+    return ProduceClass(canonical, (canonical,) + extra_prompts, category, unit)
 
 
 PRODUCE_CLASSES = [
     # --- leafy greens -------------------------------------------------
-    _c("spinach", LEAFY_GREENS, "a bunch of fresh spinach leaves"),
+    _c("spinach", LEAFY_GREENS, "a bunch of fresh spinach leaves", unit=BUNDLE),
     _c("lettuce", LEAFY_GREENS, "a head of green leaf lettuce"),
-    _c("kale", LEAFY_GREENS, "a bunch of curly kale"),
+    _c("kale", LEAFY_GREENS, "a bunch of curly kale", unit=BUNDLE),
     _c("cabbage", LEAFY_GREENS, "a round head of cabbage"),
-    _c("bok choy", LEAFY_GREENS),
+    _c("bok choy", LEAFY_GREENS, unit=BUNDLE),
+    _c("spring onion", LEAFY_GREENS, "a bunch of spring onions", unit=BUNDLE),
+    _c("coriander", LEAFY_GREENS, "a bunch of fresh coriander", "cilantro", unit=BUNDLE),
+    _c("parsley", LEAFY_GREENS, "a bunch of flat leaf parsley", unit=BUNDLE),
+    _c("herbs", LEAFY_GREENS, unit=BUNDLE),
     # --- root vegetables ----------------------------------------------
     _c("carrot", ROOT_VEGETABLE, "a carrot vegetable"),
     _c("potato", ROOT_VEGETABLE, "a raw potato"),
@@ -84,18 +100,19 @@ PRODUCE_CLASSES = [
     _c("cucumber", VEGETABLE_OTHER, "a cucumber vegetable"),
     _c("zucchini", VEGETABLE_OTHER, "a zucchini courgette"),
     _c("eggplant", VEGETABLE_OTHER, "an eggplant aubergine"),
-    _c("green beans", VEGETABLE_OTHER, "a handful of green beans"),
+    _c("green beans", VEGETABLE_OTHER, "a handful of green beans", unit=BUNDLE),
     _c("corn", VEGETABLE_OTHER, "an ear of corn"),
     _c("mushroom", VEGETABLE_OTHER, "a button mushroom"),
     # --- fruit ---------------------------------------------------------
     _c("apple", FRUIT),
-    _c("banana", FRUIT, "a bunch of bananas"),
+    _c("banana", FRUIT, "a bunch of bananas"),   # discrete: bananas are counted individually
     # "orange" alone is also a colour; the variant disambiguates.
     _c("orange", FRUIT, "an orange citrus fruit"),
     _c("lemon", FRUIT),
     _c("lime", FRUIT, "a lime fruit"),
-    _c("grapes", FRUIT, "a bunch of grapes"),
-    _c("strawberry", FRUIT),
+    _c("grapes", FRUIT, "a bunch of grapes", unit=CONTAINER),
+    _c("strawberry", FRUIT, unit=CONTAINER),
+    _c("cherry", FRUIT, "a jar of cherries", unit=CONTAINER),
     _c("avocado", FRUIT),
     _c("pear", FRUIT),
     _c("mango", FRUIT),
@@ -111,6 +128,31 @@ PROMPT_TO_CANONICAL = {
 }
 
 CATEGORY_FOR = {item.canonical: item.category for item in PRODUCE_CLASSES}
+UNIT_FOR = {item.canonical: item.unit for item in PRODUCE_CLASSES}
+
+# Units for names the VLM may return that are not prompted for.
+EXTRA_UNITS = {
+    "green onion": BUNDLE, "scallion": BUNDLE,
+    "blackberry": CONTAINER, "blueberry": CONTAINER, "raspberry": CONTAINER,
+    "berry": CONTAINER, "cilantro": BUNDLE, "asparagus": BUNDLE,
+    "celery": BUNDLE, "leek": BUNDLE, "peas": CONTAINER,
+}
+
+
+def unit_for(label):
+    """How this item is counted: discrete, bundle or container."""
+    if not label:
+        return DISCRETE
+    name = label.strip().lower()
+    for table in (UNIT_FOR, EXTRA_UNITS):
+        if name in table:
+            return table[name]
+    words = name.split()
+    if len(words) > 1:
+        for table in (UNIT_FOR, EXTRA_UNITS):
+            if words[-1] in table:
+                return table[words[-1]]
+    return DISCRETE
 
 # Names the VLM returns that are not worth prompting YOLOE for, but still need
 # a shelf life. The VLM names things open-vocabulary, so it is not limited to
@@ -118,6 +160,14 @@ CATEGORY_FOR = {item.canonical: item.category for item in PRODUCE_CLASSES}
 # without an entry here that becomes 'uncategorized' and gets a 7-day shelf
 # life when berries last about three.
 EXTRA_CATEGORIES = {
+    # Synonyms the VLM returns for classes we already have. Without these the
+    # same object fragments across two names in the inventory table.
+    "cilantro": LEAFY_GREENS,
+    "green onion": LEAFY_GREENS,
+    "scallion": LEAFY_GREENS,
+    "capsicum": VEGETABLE_OTHER,
+    "courgette": VEGETABLE_OTHER,
+    "aubergine": VEGETABLE_OTHER,
     "blackberry": FRUIT,
     "blueberry": FRUIT,
     "raspberry": FRUIT,
@@ -125,7 +175,6 @@ EXTRA_CATEGORIES = {
     "celery": VEGETABLE_OTHER,
     "leek": VEGETABLE_OTHER,
     "asparagus": VEGETABLE_OTHER,
-    "spring onion": ROOT_VEGETABLE,
     "peas": VEGETABLE_OTHER,
 }
 
@@ -171,6 +220,10 @@ def _assert_labels_valid():
 
     if len(PROMPT_TO_CANONICAL) != len(PROMPTS):
         raise ValueError("Duplicate prompt text across PRODUCE_CLASSES")
+
+    bad_units = {i.canonical: i.unit for i in PRODUCE_CLASSES if i.unit not in VALID_UNITS}
+    if bad_units:
+        raise ValueError(f"Classes with an invalid counting unit: {bad_units}")
 
 
 _assert_labels_valid()

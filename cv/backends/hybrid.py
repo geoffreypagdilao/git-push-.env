@@ -69,6 +69,10 @@ class HybridBackend:
             )
         return named
 
+    def read(self, frame):
+        """Full Readings: counts, units, occlusion, container. See base.Reading."""
+        return self.vlm.read(frame)
+
     def count(self, frame):
         """``{name: count}`` for the frame, from the VLM.
 

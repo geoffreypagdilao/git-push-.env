@@ -47,20 +47,43 @@ class Detector:
             detections = deduplicate(detections, self.iou_threshold)
         return detections
 
-    def detect(self, frame):
-        """``{label: count}`` for this frame - the inventory reading.
+    def read(self, frame):
+        """Structured inventory: what, how many, how sure, how occluded.
 
-        Where the backend can count directly it is asked to, because counting
-        boxes is not the same as counting items. YOLOE draws a single box over
-        a bunch of touching carrots, so box-counting reported 3 where there
-        were 7; the VLM asked to count the same frame said 6, three times out
-        of three. Backends without a counter fall back to counting boxes.
+        Prefer this over detect(). A single integer cannot express that a
+        strawberry punnet is one container holding at least 28 berries - and
+        collapsing that at this layer throws away the provenance the agent
+        needs to decide whether to trust the number.
+
+        Backends without a reader fall back to flat counts.
         """
-        counter = getattr(self.backend, "count", None)
-        if counter is not None:
-            return counter(frame)
+        reader = getattr(self.backend, "read", None)
+        if reader is not None:
+            return reader(frame)
 
-        return dict(Counter(d.label for d in self.detect_detailed(frame)))
+        from cv.backends.base import Reading
+        from cv.labels import unit_for
+
+        return [
+            Reading(sku_id=name, unit=unit_for(name), count_visible=n)
+            for name, n in self.detect(frame).items()
+        ]
+
+    def detect(self, frame):
+        """``{label: count}`` - a flattened view of read().
+
+        Derived from read() rather than asking the model separately. Running
+        two differently-worded counting prompts produced two different answers
+        for the same photo (15 strawberries vs 20), cost two inference calls,
+        and gave callers no way to tell which to believe. One call, one answer.
+
+        Counts are in counting units, so a punnet of strawberries is 1 - use
+        read() when you need the number of berries inside it.
+        """
+        counts = {}
+        for r in self.read(frame):
+            counts[r.sku_id] = counts.get(r.sku_id, 0) + r.best_count()
+        return counts
 
 
 def _build_backend(name, model_path, conf):
