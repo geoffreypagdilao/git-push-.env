@@ -399,6 +399,7 @@ This runs each photo 3 times and checks two things:
 | `CV_BACKEND` | `hybrid` under `python -m cv`, else `yoloe` | `hybrid` is the accurate one; `yoloe` skips the naming model |
 | `CV_CONF_THRESHOLD` | `0.25` | Lower = finds more, but more false alarms |
 | `CV_OLLAMA_MODEL` | `qwen3-vl:8b-instruct` | The naming model |
+| `CV_HYBRID_CONTEXT` | `0` | Send the whole photo alongside each crop so the namer can judge size. Fixed one apple-vs-tomato and broke one apple-vs-pear on our test photo, at 4× the time — off until it's measured on a real benchmark |
 | `CV_VLM_SAMPLES` | `1` | Read each photo N times, keep only what the runs agree on. `3` is steadier but 3× slower — worth it for a live camera |
 | `OLLAMA_HOST` | `http://localhost:11434` | Where Ollama is running |
 
