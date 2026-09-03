@@ -1,20 +1,140 @@
+import os
 from collections import Counter
 
-from ultralytics import YOLOWorld
+from cv.backends.base import deduplicate
+
+DEFAULT_CONF_THRESHOLD = 0.25
+DEFAULT_IOU_THRESHOLD = 0.6
+
+_detector = None
 
 
 class Detector:
-    def __init__(self, class_names, model_path="yolov8s-worldv2.pt"):
-        self.model = YOLOWorld(model_path)
-        self.model.set_classes(class_names)
+    """Turns a webcam frame into produce counts.
+
+    The model is chosen by environment so the rest of the app never names one:
+
+    - ``CV_BACKEND``        ``yoloe`` (default, zero-shot) or ``finetuned``
+    - ``CV_MODEL_PATH``     weights path; defaults per backend
+    - ``CV_CONF_THRESHOLD`` minimum confidence, default 0.25
+    """
+
+    def __init__(self, backend=None, model_path=None, conf=None, iou=None):
+        backend = backend or os.environ.get("CV_BACKEND", "yoloe")
+        model_path = model_path or os.environ.get("CV_MODEL_PATH")
+        if conf is None:
+            conf = float(
+                os.environ.get("CV_CONF_THRESHOLD", DEFAULT_CONF_THRESHOLD)
+            )
+        if iou is None:
+            iou = float(os.environ.get("CV_IOU_THRESHOLD", DEFAULT_IOU_THRESHOLD))
+
+        self.backend_name = backend
+        self.conf_threshold = conf
+        self.iou_threshold = iou
+        self.backend = _build_backend(backend, model_path, conf)
+
+    def detect_detailed(self, frame):
+        """Full detections for this frame: label, confidence, bbox.
+
+        Detector backends are deduplicated, so a class matched by two of its
+        prompts counts once. VLM backends set ``needs_dedupe = False``: they
+        already report each item once, and running the pass over them would
+        collapse genuine duplicates, since three carrots share a label and
+        usually overlap.
+        """
+        detections = self.backend.predict(frame)
+        if getattr(self.backend, "needs_dedupe", True):
+            detections = deduplicate(detections, self.iou_threshold)
+        return detections
+
+    def read(self, frame):
+        """Structured inventory: what, how many, how sure, how occluded.
+
+        Prefer this over detect(). A single integer cannot express that a
+        strawberry punnet is one container holding at least 28 berries - and
+        collapsing that at this layer throws away the provenance the agent
+        needs to decide whether to trust the number.
+
+        Backends without a reader (plain YOLOE) fall back to one box per
+        instance. Built from detect_detailed() rather than detect(), which
+        is derived from this method - going through it recursed until the
+        stack ran out and surfaced as "maximum recursion depth exceeded"
+        where a count should have been.
+        """
+        reader = getattr(self.backend, "read", None)
+        if reader is not None:
+            return reader(frame)
+
+        from cv.backends.base import Reading
+        from cv.labels import unit_for
+
+        best_confidence = {}
+        counts = Counter()
+        for det in self.detect_detailed(frame):
+            counts[det.label] += 1
+            best_confidence[det.label] = max(
+                best_confidence.get(det.label, 0.0), det.confidence
+            )
+
+        return [
+            Reading(
+                sku_id=name,
+                unit=unit_for(name),
+                count_visible=n,
+                confidence=best_confidence[name],
+            )
+            for name, n in counts.items()
+        ]
 
     def detect(self, frame):
-        results = self.model.predict(frame, verbose=False)
-        result = results[0]
+        """``{label: count}`` - a flattened view of read().
 
-        counts = Counter()
-        for cls_idx in result.boxes.cls.tolist():
-            label = result.names[int(cls_idx)]
-            counts[label] += 1
+        Derived from read() rather than asking the model separately. Running
+        two differently-worded counting prompts produced two different answers
+        for the same photo (15 strawberries vs 20), cost two inference calls,
+        and gave callers no way to tell which to believe. One call, one answer.
 
-        return dict(counts)
+        Counts are in counting units, so a punnet of strawberries is 1 - use
+        read() when you need the number of berries inside it.
+        """
+        counts = {}
+        for r in self.read(frame):
+            counts[r.sku_id] = counts.get(r.sku_id, 0) + r.best_count()
+        return counts
+
+
+def _build_backend(name, model_path, conf):
+    # Imported lazily so cv.labels and cv.smoothing stay usable without
+    # ultralytics/torch installed.
+    if name == "yoloe":
+        from cv.backends.yoloe import DEFAULT_MODEL, YoloeBackend
+
+        return YoloeBackend(model_path or DEFAULT_MODEL, conf=conf)
+
+    if name == "hybrid":
+        from cv.backends.hybrid import HybridBackend
+
+        return HybridBackend(model_path, conf=conf)
+
+    if name == "ollama":
+        from cv.backends.ollama_vlm import OllamaVlmBackend
+
+        return OllamaVlmBackend(model_path, conf=conf)
+
+    raise ValueError(
+        f"Unknown CV_BACKEND {name!r} (expected 'hybrid', 'yoloe' or 'ollama')"
+    )
+
+
+def get_detector():
+    """Process-wide singleton.
+
+    Loading weights takes seconds; the capture script posts a frame every two,
+    so constructing a Detector per request would spend all its time reloading
+    the model. Always go through this from request handlers.
+    """
+    global _detector
+    if _detector is None:
+        _detector = Detector()
+    return _detector

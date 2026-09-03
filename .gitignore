@@ -10,6 +10,22 @@ __pycache__/
 # CV model weights (auto-downloaded by ultralytics)
 *.pt
 
+# Everything ultralytics downloads lands here (checkpoints plus the MobileCLIP
+# text encoder, which is a .ts - deliberately NOT ignored globally, since that
+# would swallow the frontend's TypeScript).
+cv/weights/*
+!cv/weights/.gitkeep
+
+# CV datasets, training runs, and eval output
+cv/datasets/
+cv/eval_output/
+runs/
+
+# Local accuracy test set: photos + answer key, rebuildable with
+# `python -m cv.fetch_eval_set`. The script is tracked; the data is not -
+# it is hundreds of MB and not ours to redistribute.
+cv/eval_set/
+
 # Node (root-level, e.g. Supabase CLI devDependency)
 node_modules/
 

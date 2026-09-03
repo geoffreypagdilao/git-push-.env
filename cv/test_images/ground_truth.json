@@ -1,0 +1,21 @@
+{
+  "_note": "Hand-counted truth. Keys starting with _ are ignored. Counts are in COUNTING UNITS (see cv/labels.py): a bunch of coriander is 1, a punnet of strawberries is 1. The number of berries inside is count_visible, not the count.",
+
+  "bos.jpeg": {
+    "spinach": 1,
+    "spring onion": 1,
+    "coriander": 1,
+    "apple": 3,
+    "cucumber": 2,
+    "bell pepper": 1,
+    "strawberry": 1,
+    "cherry": 1
+  },
+
+  "_bos.jpeg_visible_contents": {
+    "_why": "Contents of containers, for reference. Surface estimates only - the jar and punnet hide what is underneath, so treat as a floor.",
+    "strawberry": "25-30 visible",
+    "cherry": "10-15 visible",
+    "_hard_case": "The 3 red round fruits on the top shelf. A human hedged between apples and nectarines; the model has said radish and tomato."
+  }
+}
