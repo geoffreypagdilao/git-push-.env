@@ -263,8 +263,6 @@ export default function Recipe({ seedItem, initialMode }) {
     setDoneSteps(new Set())
   }
 
-  const switchRecipe = () => stepRecipe(1)
-
   const toggleStep = (i) => {
     setDoneSteps((prev) => {
       const next = new Set(prev)
@@ -462,11 +460,6 @@ export default function Recipe({ seedItem, initialMode }) {
                 )
               })}
             </ol>
-
-            <button type="button" className="recipe2__another" onClick={switchRecipe} disabled={recipeList.length < 2}>
-              <Icon name="refresh" size={15} />
-              Show another idea
-            </button>
           </>
         )}
 

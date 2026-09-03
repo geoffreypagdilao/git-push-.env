@@ -1561,20 +1561,6 @@
   text-decoration: line-through;
 }
 
-.recipe2__another {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  width: fit-content;
-  margin: 22px auto 0;
-  padding: 10px 16px;
-  border-radius: var(--r-pill);
-  background: var(--fill);
-  font-weight: 700;
-  font-size: 0.82rem;
-  color: var(--label);
-}
-
 .recipe2__memory {
   margin-top: 24px;
   padding-bottom: 24px;
