@@ -30,6 +30,7 @@ class Detector:
             iou = float(os.environ.get("CV_IOU_THRESHOLD", DEFAULT_IOU_THRESHOLD))
 
         self.backend_name = backend
+        self.conf_threshold = conf
         self.iou_threshold = iou
         self.backend = _build_backend(backend, model_path, conf)
 
@@ -55,7 +56,11 @@ class Detector:
         collapsing that at this layer throws away the provenance the agent
         needs to decide whether to trust the number.
 
-        Backends without a reader fall back to flat counts.
+        Backends without a reader (plain YOLOE) fall back to one box per
+        instance. Built from detect_detailed() rather than detect(), which
+        is derived from this method - going through it recursed until the
+        stack ran out and surfaced as "maximum recursion depth exceeded"
+        where a count should have been.
         """
         reader = getattr(self.backend, "read", None)
         if reader is not None:
@@ -64,9 +69,22 @@ class Detector:
         from cv.backends.base import Reading
         from cv.labels import unit_for
 
+        best_confidence = {}
+        counts = Counter()
+        for det in self.detect_detailed(frame):
+            counts[det.label] += 1
+            best_confidence[det.label] = max(
+                best_confidence.get(det.label, 0.0), det.confidence
+            )
+
         return [
-            Reading(sku_id=name, unit=unit_for(name), count_visible=n)
-            for name, n in self.detect(frame).items()
+            Reading(
+                sku_id=name,
+                unit=unit_for(name),
+                count_visible=n,
+                confidence=best_confidence[name],
+            )
+            for name, n in counts.items()
         ]
 
     def detect(self, frame):

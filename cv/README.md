@@ -71,9 +71,21 @@ not a total. The system says so instead of pretending to know.
 
 ---
 
-## Setup — 3 steps
+## Setup — 4 steps
 
-### Step 1 · Python 3.12 and the libraries
+### Step 1 · Get the code
+
+```bash
+git clone https://github.com/geoffreypagdilao/git-push-.env.git
+cd git-push-.env
+git checkout feature/cv-produce-detection
+```
+
+Every command on this page runs **from the repo root** — the folder that
+contains `cv/`, not `cv/` itself. The paths are relative, so `python -m cv`
+only finds `cv/test_images/` from there.
+
+### Step 2 · Python 3.12 and the libraries
 
 ⚠️ **It must be Python 3.12.** Newer versions (3.13, 3.14) don't work yet —
 PyTorch hasn't released files for them. Your Mac's built-in `python3` is
@@ -87,7 +99,7 @@ uv pip install -r cv/requirements.txt
 
 Don't have `uv`? Install it with `brew install uv`.
 
-### Step 2 · Ollama (the program that runs the naming model)
+### Step 3 · Ollama (the program that runs the naming model)
 
 Ollama is **not** an AI model. It's a little background program that loads the
 model and keeps it ready — like a local server.
@@ -100,12 +112,17 @@ ollama pull qwen3-vl:8b-instruct
 
 That last command downloads about **6 GB**, so give it a few minutes.
 
+⚠️ **Keep the `&`.** Plain `ollama serve` holds the terminal, and the server
+dies the moment that tab is closed or interrupted — the run then fails with
+`Could not reach Ollama` even though you "started it". Either background it or
+give it its own tab.
+
 > 💡 **Make sure it says `instruct` at the end.** There is another version
 > called plain `qwen3-vl:8b` that *thinks out loud* for thousands of words
 > before answering, which uses up its whole budget and returns nothing about
 > half the time. The `instruct` one answers directly.
 
-### Step 3 · Run it
+### Step 4 · Run it
 
 ```bash
 python -m cv
@@ -122,6 +139,25 @@ python -m cv --conf 0.15     # look harder
 
 The first run also downloads the YOLOE model (~272 MB) automatically into
 `cv/weights/`. After that it's instant.
+
+A working run ends like this:
+
+```
+apple.webp: 32 box(es)
+    apple          0.78  [fruit]
+    ...
+      apple          x32  discrete   none          ← the naming model answered
+
+Totals across 1 image(s):
+    apple           32  [fruit]
+
+Annotated images written to cv/eval_output/
+Results written to cv/eval_output/results.json
+```
+
+If that indented inventory line is missing and you see `inventory count
+unavailable: Could not reach Ollama`, the boxes worked but the naming model
+did not — jump to [Something went wrong?](#something-went-wrong).
 
 ---
 
@@ -166,6 +202,56 @@ and a score on each item:
 
 ---
 
+## `results.json` — the whole run, in a file
+
+Every saved run also writes `cv/eval_output/results.json`: the same numbers the
+terminal printed, plus the parts it has no room for — the box coordinates, and
+when the run happened.
+
+```json
+{
+  "run": {
+    "timestamp": "2026-09-03T10:15:00+08:00",
+    "date": "2026-09-03", "day": "Thursday", "time": "10:15:00",
+    "backend": "hybrid", "conf_threshold": 0.25, "image_count": 1
+  },
+  "images": [
+    {
+      "file": "apple.webp", "date": "2026-09-03", "day": "Thursday",
+      "width": 600, "height": 900, "box_count": 32,
+      "detections": [
+        {"label": "apple", "category": "fruit", "confidence": 0.7774,
+         "bbox": [202.0, 602.7, 276.3, 675.8]}
+      ],
+      "counts": {"apple": 32},
+      "readings": [{"sku_id": "apple", "unit": "discrete", "count_visible": 32,
+                    "best_count": 32, "occlusion": "none", "is_floor": false}],
+      "annotated": "cv/eval_output/apple_annotated.webp"
+    }
+  ],
+  "totals": [{"label": "apple", "count": 32, "category": "fruit"}]
+}
+```
+
+Trimmed for space — the real file lists all 32 boxes, and each reading also
+carries `container`, `count_estimated`, `confidence` and `evidence_box`.
+
+Each image carries **its own** date, day and time, not just the run's, so a
+folder that takes several minutes keeps a per-photo stamp — and two runs can be
+diffed instead of eyeballed.
+
+`detections` are the boxes; `readings` are the inventory, with the units and
+occlusion explained above. Trust `readings`.
+
+Failures are written down rather than dropped: a file that won't open gets an
+`"error"`, and a run where the naming model was unreachable gets a
+`"counts_error"` with empty `counts` and `readings`. The boxes are still there,
+so a half-working run is visible as one instead of passing for a good one.
+
+`cv/eval_output/` is gitignored, so none of this gets pushed.
+
+---
+
 ## Useful options
 
 | Command | What it does |
@@ -173,6 +259,7 @@ and a score on each item:
 | `--no-open` | Don't pop open the results folder afterwards |
 | `--save` | Save the images with boxes drawn on them (on by default via `python -m cv`) |
 | `--conf 0.15` | Look harder — finds more, but more mistakes too |
+| `--json` | Write `results.json` next to the annotated images — every box, count and reading, with the date and time of the run (`--save` does this for you; pass a path to put it elsewhere) |
 | `cv/test_images/one.jpg` | Run on a single photo instead of the whole folder |
 | `CV_BACKEND=yoloe` | Skip the naming model. Instant, no Ollama needed, less accurate |
 
@@ -183,6 +270,8 @@ and a score on each item:
 | What you see | What it means | Fix |
 |---|---|---|
 | `Could not reach Ollama` | The background program isn't running | `ollama serve &` |
+| `Could not reach Ollama` *right after you started it* | `ollama serve` was left in the foreground and died with that tab | Restart it as `ollama serve &`, then check: `curl -s localhost:11434/api/tags` |
+| Boxes appear but every name looks like a rough guess | The namer was unreachable, so `hybrid` kept the finder's own labels rather than dropping real items | Same fix — an item with a poor name beats a missing item |
 | `no module named torch` | Wrong Python, or venv not active | `source .venv/bin/activate` |
 | `ERROR: No matching distribution` on install | Python is 3.13 or 3.14 | Rebuild the venv with `--python 3.12` |
 | `address already in use` | Ollama was **already** running | Nothing — that's fine, ignore it |
@@ -287,7 +376,8 @@ This runs each photo 3 times and checks two things:
 
 | File | Job |
 |---|---|
-| `eval_local.py` | The command you type |
+| `__main__.py` | `python -m cv` — the short entry point, picks the hybrid backend |
+| `eval_local.py` | Does the run: prints the results, saves the images, writes `results.json` |
 | `detector.py` | Chooses which models to use |
 | `labels.py` | The list of fruits & vegetables to look for |
 | `backends/yoloe.py` | The finder 🔍 |
@@ -306,7 +396,7 @@ This runs each photo 3 times and checks two things:
 
 | Setting | Default | Meaning |
 |---|---|---|
-| `CV_BACKEND` | `yoloe` | Use `hybrid` for the best results |
+| `CV_BACKEND` | `hybrid` under `python -m cv`, else `yoloe` | `hybrid` is the accurate one; `yoloe` skips the naming model |
 | `CV_CONF_THRESHOLD` | `0.25` | Lower = finds more, but more false alarms |
 | `CV_OLLAMA_MODEL` | `qwen3-vl:8b-instruct` | The naming model |
 | `CV_VLM_SAMPLES` | `1` | Read each photo N times, keep only what the runs agree on. `3` is steadier but 3× slower — worth it for a live camera |
@@ -317,3 +407,8 @@ Use them like this:
 ```bash
 CV_BACKEND=hybrid CV_CONF_THRESHOLD=0.15 python -m cv.eval_local cv/test_images
 ```
+
+`python -m cv` sets `CV_BACKEND=hybrid` for you; calling `python -m cv.eval_local`
+directly does **not**, and falls back to `yoloe`. Whichever ran is recorded in
+`results.json` under `"backend"`, so check there if a run looks less accurate
+than you expected.
