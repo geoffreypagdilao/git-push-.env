@@ -108,6 +108,18 @@ def _days_until(expiry_date) -> str:
     return str(delta)
 
 
+def _has_pantry_violation(recipe: "Recipe", stock_names: set[str]) -> bool:
+    """True if pantry mode's core promise is broken: an ingredient that's
+    neither a basic staple nor actually in the user's tracked stock. The
+    system prompt asks the model for this, but it isn't reliably followed
+    (observed live: soy sauce/dry sherry/cornstarch sneaking into a "what
+    you have" recipe) — re-checked here in code so a violation can never
+    reach the user, matching the rest of agent/'s "don't just prompt it,
+    guarantee it" pattern.
+    """
+    return any(not ing.pantry and ing.name.lower() not in stock_names for ing in recipe.ingredients)
+
+
 def _is_pantry_staple(name: str) -> bool:
     lname = name.lower()
     return any(kw in lname for kw in PANTRY_STAPLE_KEYWORDS)
@@ -292,6 +304,7 @@ def generate_recipes(count: int = 3, mode: str = "pantry") -> dict:
 
     llm = _get_llm(max_tokens=4096, model=MODEL_BY_MODE[mode]).with_structured_output(RecipeList)
     system_prompt = MODE_PROMPTS[mode]
+    stock_names = {item["name"].lower() for item in stock}
 
     last_exc = None
     for attempt in range(MAX_LLM_RETRIES + 1):
@@ -305,7 +318,20 @@ def generate_recipes(count: int = 3, mode: str = "pantry") -> dict:
             # The prompt's "suggest {count} recipes" is just an instruction,
             # not a guarantee — models occasionally return more (or fewer).
             # Truncating enforces count as a hard max regardless.
-            return {"recipes": [r.model_dump() for r in result.recipes[:count]], "error": False}
+            recipes = result.recipes[:count]
+
+            if mode == "pantry":
+                clean = [r for r in recipes if not _has_pantry_violation(r, stock_names)]
+                if len(clean) < len(recipes) and attempt < MAX_LLM_RETRIES:
+                    # At least one recipe broke the fridge-only promise —
+                    # retry for a fully clean batch before settling.
+                    continue
+                # Last attempt (or already clean): return only the clean
+                # ones. Fewer correct recipes beats any recipe with a
+                # non-fridge ingredient silently slipping through.
+                return {"recipes": [r.model_dump() for r in clean], "error": False}
+
+            return {"recipes": [r.model_dump() for r in recipes], "error": False}
         except Exception as exc:  # noqa: BLE001 — mirrors langchain_agent's retry-then-graceful-fail pattern
             last_exc = exc
             if attempt < MAX_LLM_RETRIES:
