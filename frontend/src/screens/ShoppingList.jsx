@@ -5,7 +5,7 @@ import Icon from '../components/Icon'
 import SectionHeader from '../components/SectionHeader'
 import { AddChip } from '../components/Chip'
 import { useStore } from '../lib/store'
-import { CARTS, stickerFor } from '../lib/mockData'
+import { stickerFor } from '../lib/mockData'
 import { plural, relativeAdded } from '../lib/inventory'
 
 function StickerTile({ name, children }) {
@@ -28,6 +28,13 @@ function relativeSince(iso) {
   return relativeAdded(days)
 }
 
+// The backend fills store_link on every new row, but rows staged before that
+// existed (and rows handed back by its duplicate check) can still be null —
+// rebuild the same search URL so the link always goes somewhere useful.
+function storeLinkFor(entry) {
+  return entry.store_link || `https://www.fairprice.com.sg/search?query=${encodeURIComponent(entry.item_name)}`
+}
+
 function PendingRow({ entry, onPurchase, onDismiss }) {
   return (
     <div className="shop-row">
@@ -37,6 +44,15 @@ function PendingRow({ entry, onPurchase, onDismiss }) {
         <div className="shop-row__why">Staged {relativeSince(entry.staged_at)}</div>
       </div>
       <div className="shop-row__actions">
+        <a
+          className="btn btn--ghost shop-row__buy"
+          href={storeLinkFor(entry)}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label={`Find ${entry.item_name} at FairPrice`}
+        >
+          Buy
+        </a>
         <Button variant="ghost" onClick={onPurchase}>
           Purchased
         </Button>
@@ -49,11 +65,10 @@ function PendingRow({ entry, onPurchase, onDismiss }) {
 }
 
 export default function ShoppingList() {
-  const { state, addStaple, dismissShopping, setShoppingStatus, sendCart } = useStore()
+  const { state, addStaple, dismissShopping, setShoppingStatus } = useStore()
   const [showAllPurchased, setShowAllPurchased] = useState(false)
 
   const pending = useMemo(() => state.shopping.filter((s) => s.status === 'pending'), [state.shopping])
-  const inCart = useMemo(() => state.shopping.filter((s) => s.status === 'in_cart'), [state.shopping])
   const purchased = useMemo(
     () =>
       state.shopping
@@ -63,9 +78,6 @@ export default function ShoppingList() {
   )
   const purchasedShown = showAllPurchased ? purchased : purchased.slice(0, 3)
 
-  const cart = CARTS.find((c) => c.id === state.cart) || CARTS[1]
-  const sentCart = CARTS.find((c) => c.id === state.lastSent?.cart)
-
   return (
     <div className="screen">
       <TopBar wordmark />
@@ -73,9 +85,7 @@ export default function ShoppingList() {
       <div className="screen__scroll">
         <h1 className="display">Shopping list</h1>
         <p className="meta" style={{ marginTop: 8 }}>
-          {pending.length === 0 && inCart.length > 0
-            ? `${plural(inCart.length, 'item')} on the way to ${sentCart?.label || cart.label}`
-            : `${plural(pending.length, 'item')} to buy`}
+          {plural(pending.length, 'item')} to buy
         </p>
 
         <div className="shop-cols">
@@ -97,27 +107,6 @@ export default function ShoppingList() {
             )}
           </div>
         </div>
-
-        {inCart.length > 0 && (
-          <>
-            <SectionHeader label="On its way" tag={`to ${sentCart?.label || cart.label}`} />
-            <div className="shop-block">
-              {inCart.map((e) => (
-                <div className="shop-row shop-row--sent" key={e.id}>
-                  <StickerTile name={e.item_name}>
-                    <span className="shop-row__done">
-                      <Icon name="check" size={11} />
-                    </span>
-                  </StickerTile>
-                  <div className="shop-row__body">
-                    <div className="shop-row__name">{e.item_name}</div>
-                    <div className="shop-row__why">Sent {relativeSince(e.staged_at)}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </>
-        )}
 
         {purchased.length > 0 && (
           <>
@@ -149,19 +138,6 @@ export default function ShoppingList() {
             )}
           </>
         )}
-
-        <div className="shop-send">
-          {pending.length === 0 && state.lastSent ? (
-            <div className="sent-pill">
-              <Icon name="check" size={16} />
-              Sent {plural(state.lastSent.count, 'item')} to {sentCart?.label}
-            </div>
-          ) : (
-            <Button full disabled={pending.length === 0} onClick={sendCart}>
-              Send {plural(pending.length, 'item')} to {cart.label}
-            </Button>
-          )}
-        </div>
       </div>
     </div>
   )

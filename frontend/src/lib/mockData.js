@@ -56,13 +56,6 @@ export function stickerFor(name) {
   return STICKER_BY_NAME[name.trim().toLowerCase()] || null
 }
 
-export const CARTS = [
-  { id: 'instacart', label: 'Instacart', note: 'US & Canada only', disabled: true },
-  { id: 'redmart', label: 'RedMart', note: 'Singapore', disabled: false },
-  { id: 'amazon', label: 'Amazon Fresh', note: 'Prime', disabled: false },
-  { id: 'mock', label: 'Mock cart', note: 'Demo', disabled: false },
-]
-
 export const EXPIRY_PRESETS = [
   { label: '3 days', days: 3 },
   { label: '1 week', days: 7 },

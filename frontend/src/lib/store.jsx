@@ -5,8 +5,8 @@ import { adaptItem } from './inventory'
 // All inventory/shopping data comes from the backend (see lib/api.js) — this
 // store just holds it in React state and exposes actions that call the API
 // then patch local state from the real response. Only a few UI-only settings
-// (onboarding-seen, autonomy mode, chosen cart) persist to localStorage,
-// since the DB has no columns for them yet (see forxp.md §10.2).
+// (onboarding-seen, autonomy mode) persist to localStorage, since the DB has
+// no columns for them yet (see forxp.md §10.2).
 
 const SETTINGS_KEY = 'yoink.settings'
 // Recipes are generated fresh each time (LLM or MealDB), not stored server
@@ -24,9 +24,9 @@ function loadSettings() {
   try {
     const raw = localStorage.getItem(SETTINGS_KEY)
     if (!raw) throw new Error('no settings yet')
-    return { onboarded: false, autonomy: 'suggest', cart: 'redmart', ...JSON.parse(raw) }
+    return { onboarded: false, autonomy: 'suggest', ...JSON.parse(raw) }
   } catch {
-    return { onboarded: false, autonomy: 'suggest', cart: 'redmart' }
+    return { onboarded: false, autonomy: 'suggest' }
   }
 }
 
@@ -55,7 +55,6 @@ function initState() {
     ...loadSettings(),
     inventory: [],
     shopping: [],
-    lastSent: null,
     inventoryLoaded: false,
     shoppingLoaded: false,
     savedRecipes: loadSavedRecipes(),
@@ -70,9 +69,6 @@ function reducer(state, action) {
 
     case 'SET_AUTONOMY':
       return { ...state, autonomy: action.mode }
-
-    case 'SET_CART':
-      return { ...state, cart: action.cart }
 
     case 'SET_INVENTORY':
       return { ...state, inventory: action.items.map(adaptItem), inventoryLoaded: true }
@@ -101,9 +97,6 @@ function reducer(state, action) {
 
     case 'REMOVE_SHOPPING_ENTRY':
       return { ...state, shopping: state.shopping.filter((s) => s.id !== action.id) }
-
-    case 'SET_LAST_SENT':
-      return { ...state, lastSent: action.lastSent }
 
     case 'SAVE_RECIPE': {
       if (state.savedRecipes.some((r) => r.title === action.recipe.title)) return state
@@ -137,9 +130,9 @@ export function StoreProvider({ children }) {
   const [state, dispatch] = useReducer(reducer, undefined, initState)
 
   useEffect(() => {
-    const { onboarded, autonomy, cart } = state
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ onboarded, autonomy, cart }))
-  }, [state.onboarded, state.autonomy, state.cart])
+    const { onboarded, autonomy } = state
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ onboarded, autonomy }))
+  }, [state.onboarded, state.autonomy])
 
   useEffect(() => {
     localStorage.setItem(SAVED_RECIPES_KEY, JSON.stringify(state.savedRecipes))
@@ -201,13 +194,6 @@ export function StoreProvider({ children }) {
         dispatch({ type: 'UPSERT_SHOPPING_ENTRY', entry })
       },
 
-      sendCart: async () => {
-        const pending = state.shopping.filter((s) => s.status === 'pending')
-        const updated = await Promise.all(pending.map((s) => api.updateShoppingStatus(s.id, 'in_cart')))
-        updated.forEach((entry) => dispatch({ type: 'UPSERT_SHOPPING_ENTRY', entry }))
-        dispatch({ type: 'SET_LAST_SENT', lastSent: { cart: state.cart, count: pending.length, at: Date.now() } })
-      },
-
       runAgentSweep: async (mode) => {
         const result = await api.runAgentSweep(mode)
         await Promise.all([refreshInventory(), refreshShopping()])
@@ -236,7 +222,7 @@ export function StoreProvider({ children }) {
         dispatch({ type: 'SET_COOKED_MEMORY_PHOTO', id, dataUrl })
       },
     }),
-    [state.shopping, state.cart, state.savedRecipes, state.cookedRecipes, refreshInventory, refreshShopping],
+    [state.savedRecipes, state.cookedRecipes, refreshInventory, refreshShopping],
   )
 
   const value = useMemo(

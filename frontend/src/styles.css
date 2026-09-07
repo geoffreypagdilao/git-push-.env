@@ -1181,6 +1181,19 @@
   align-items: center;
   gap: 6px;
 }
+.shop-row__buy {
+  /* Anchor, not a <button>, so it stays middle-clickable / copyable — the
+     .btn classes give it the same pill as the neighbouring "Purchased",
+     and the accent colour marks it as the one action that leaves the app
+     (same blue as .section-header__link). */
+  text-decoration: none;
+  white-space: nowrap;
+  color: var(--accent);
+}
+.shop-row__buy:hover {
+  background: var(--fill-2);
+  text-decoration: underline;
+}
 .shop-row__dismiss {
   display: grid;
   place-items: center;

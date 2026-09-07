@@ -1,4 +1,5 @@
 from datetime import datetime
+from urllib.parse import quote
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -6,6 +7,15 @@ from pydantic import BaseModel
 from backend.app.db.supabase_client import supabase
 
 router = APIRouter(prefix="/shopping-list", tags=["shopping-list"])
+
+# Not a real add-to-cart integration (see the schema comment on
+# shopping_list.store_link) — just a cached search-results URL so tapping an
+# item opens the store with that item already searched for.
+FAIRPRICE_SEARCH = "https://www.fairprice.com.sg/search?query="
+
+
+def search_link(item_name: str) -> str:
+    return FAIRPRICE_SEARCH + quote(item_name)
 
 
 class ShoppingListItemCreate(BaseModel):
@@ -41,7 +51,13 @@ def stage_item(item: ShoppingListItemCreate):
         if existing.data:
             return existing.data[0]
 
-    result = supabase.table("shopping_list").insert(item.model_dump(exclude_none=True)).execute()
+    payload = item.model_dump(exclude_none=True)
+    # Generated server-side so every row gets a link no matter which caller
+    # staged it (manual add, recipe screen, fridge detail, agent sweep).
+    if not payload.get("store_link"):
+        payload["store_link"] = search_link(item.item_name)
+
+    result = supabase.table("shopping_list").insert(payload).execute()
     return result.data[0]
 
 
